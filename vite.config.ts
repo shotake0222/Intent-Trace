@@ -32,6 +32,10 @@ export default defineConfig({
         ]
       },
       workbox: {
+        // 新しいバージョンを待機させずに即座に有効化（古い画面のまま残らないように）
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//, /^\/ws\//],
         globPatterns: ["**/*.{js,css,html,png,svg,webmanifest}"],
