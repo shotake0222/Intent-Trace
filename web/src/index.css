@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+  --color-brand: #0f172a;
+  --color-accent: #f59e0b;
+  --color-accent-dark: #b45309;
+}
+
+html, body, #root { min-height: 100%; }
+body { background: #f1f5f9; color: #0f172a; -webkit-tap-highlight-color: transparent; }
+.safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+@keyframes pulse-ring { 0% { transform: scale(.9); opacity: .8 } 100% { transform: scale(1.6); opacity: 0 } }
+.pulse-ring { animation: pulse-ring 1.4s ease-out infinite; }

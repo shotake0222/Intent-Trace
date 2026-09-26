@@ -1,0 +1,3 @@
+JWT_SECRET=ランダムな長い文字列
+TAG_KEY_SECRET=64桁のhex（NTAG424鍵をD1内で暗号化する鍵）
+SETUP_TOKEN=初期セットアップ用トークン

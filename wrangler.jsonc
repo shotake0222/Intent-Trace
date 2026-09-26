@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "intent-trace",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  // PWA (web/) のビルド成果物を同一Workerから配信。/api/* と /ws/* はWorkerが先に処理。
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/ws/*"]
+  },
+  "vars": {
+    "APP_NAME": "Intent-Trace"
+  },
+  // ▼ デプロイ時に `wrangler d1 create` 等で発行されたIDに差し替える（scripts/provision.sh 参照）
+  "d1_databases": [
+    { "binding": "DB", "database_name": "intent-trace", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "intent-trace-files" }
+  ],
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "00000000000000000000000000000000" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "EQUIPMENT_LOCK", "class_name": "EquipmentLock" },
+      { "name": "DEADMAN", "class_name": "DeadmanTimer" },
+      { "name": "SITE_HUB", "class_name": "SiteHub" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["EquipmentLock", "DeadmanTimer", "SiteHub"] }
+  ]
+  // secrets: JWT_SECRET, TAG_KEY_SECRET, SETUP_TOKEN  (wrangler secret put ...)
+}
