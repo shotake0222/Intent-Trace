@@ -6,6 +6,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# 失敗時はログ末尾をアノテーションに出す（ログ本体を開けない環境でも原因が分かるように）
+LOG=/tmp/ci-deploy.log
+exec > >(tee "$LOG") 2>&1
+trap 'rc=$?; msg=$(tail -n 25 "$LOG" | grep -v "::add-mask::" | sed "s/%/%25/g" | awk "{printf \"%s%%0A\", \$0}"); echo "::error title=ci-deploy failed (line $LINENO, rc=$rc)::$msg"' ERR
+
 api() { curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4$1"; }
 
 if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then

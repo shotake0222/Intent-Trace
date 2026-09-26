@@ -14,8 +14,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -38,9 +38,9 @@ jobs:
             echo "::warning::リポジトリの Secrets に CLOUDFLARE_API_TOKEN が未設定のためデプロイをスキップしました"
             echo "SKIP=1" >> "$GITHUB_ENV"
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: env.SKIP != '1'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: env.SKIP != '1'
         with:
           node-version: 22
@@ -49,4 +49,4 @@ jobs:
         run: npm ci
       - name: Cloudflare へデプロイ（リソース作成・マイグレーション・初回セットアップ含む）
         if: env.SKIP != '1'
-        run: ./scripts/ci-deploy.sh
+        run: bash scripts/ci-deploy.sh
