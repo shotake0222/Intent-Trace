@@ -9,7 +9,11 @@ const [base = "http://127.0.0.1:5173", token = "dev-setup-token"] = process.argv
 const withHistory = process.argv.includes("--history");
 const api = client(base);
 
-const ADMIN = { email: "admin@demo.example", password: "demo-admin-pass" };
+// 本番（公開URL）で使う場合は環境変数でパスワードを指定する（指定時は標準出力に表示しない）
+const secretMode = !!process.env.ADMIN_PASSWORD;
+const ADMIN = { email: process.env.ADMIN_EMAIL ?? "admin@demo.example", password: process.env.ADMIN_PASSWORD ?? "demo-admin-pass" };
+const MANAGER_PASSWORD = process.env.MANAGER_PASSWORD ?? "demo-manager-pass";
+const WORKER_PIN = process.env.WORKER_PIN ?? "1234";
 await api.post("/api/auth/setup", {
   token,
   orgName: "多摩ビルサービス（デモ）",
@@ -43,10 +47,10 @@ const qElec = (await api.post("/api/admin/qualifications", { code: "ELEC2", name
 // ユーザー
 const mk = (b) => api.post("/api/admin/users", b).then((r) => r.id);
 const users = {
-  tanaka: await mk({ role: "worker", name: "田中 一郎", employeeCode: "W001", secret: "1234", badgeUid: "04A1B2C3D4E5F6", bleId: "100:1" }),
-  sato: await mk({ role: "worker", name: "佐藤 花子", employeeCode: "W002", secret: "1234", bleId: "100:2" }),
-  suzuki: await mk({ role: "worker", name: "鈴木 次郎", employeeCode: "W003", secret: "1234", bleId: "100:3" }),
-  manager: await mk({ role: "manager", name: "現場 監督", employeeCode: "M001", email: "manager@demo.example", secret: "demo-manager-pass" })
+  tanaka: await mk({ role: "worker", name: "田中 一郎", employeeCode: "W001", secret: WORKER_PIN, badgeUid: "04A1B2C3D4E5F6", bleId: "100:1" }),
+  sato: await mk({ role: "worker", name: "佐藤 花子", employeeCode: "W002", secret: WORKER_PIN, bleId: "100:2" }),
+  suzuki: await mk({ role: "worker", name: "鈴木 次郎", employeeCode: "W003", secret: WORKER_PIN, bleId: "100:3" }),
+  manager: await mk({ role: "manager", name: "現場 監督", employeeCode: "M001", email: "manager@demo.example", secret: MANAGER_PASSWORD })
 };
 const year = 365 * 86400_000;
 await api.must("PUT", `/api/admin/users/${users.tanaka}/qualifications/${qFork}`, { certifiedAt: Date.now() - year, expiresAt: Date.now() + 2 * year });
@@ -108,11 +112,12 @@ writeFileSync("seed/demo-ids.json", JSON.stringify(out, null, 2));
 
 if (withHistory) writeFileSync("seed/history.sql", history(out));
 
+const show = (v) => (secretMode ? "（非表示）" : v);
 console.log(`
 デモデータを作成しました
-  管理者      : ${ADMIN.email} / ${ADMIN.password}
-  マネージャー: manager@demo.example / demo-manager-pass
-  作業員      : 会社コード DEMO / 社員番号 W001〜W003 / PIN 1234
+  管理者      : ${ADMIN.email} / ${show(ADMIN.password)}
+  マネージャー: manager@demo.example / ${show(MANAGER_PASSWORD)}
+  作業員      : 会社コード DEMO / 社員番号 W001〜W003 / PIN ${show(WORKER_PIN)}
                 （W003 鈴木 はフォークリフト資格が期限切れ）
   タグURL例   : ${base}/t/${tags.panelA}
   ID一覧      : seed/demo-ids.json${withHistory ? "\n  履歴SQL     : seed/history.sql（wrangler d1 execute で投入）" : ""}

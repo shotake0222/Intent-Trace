@@ -86,15 +86,19 @@ node scripts/e2e.mjs http://localhost:5173  # 結合（seed 後）
 
 ## デプロイ（Cloudflare）
 
-1. Cloudflare API トークンを作成（権限: Workers Scripts / D1 / R2 / Workers KV Storage の編集、Account Settings の読み取り）
-2. `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` を環境変数に設定し `./scripts/provision.sh`
-   - D1 / R2 / KV を作成し `wrangler.jsonc` に ID を反映、マイグレーション、初回デプロイ、シークレット登録まで行います
-3. テナント作成:
+**GitHub Actions（標準）**: リポジトリの Secrets に `CLOUDFLARE_API_TOKEN`（任意で `CLOUDFLARE_ACCOUNT_ID`）を登録すると、`main` への push ごとに `scripts/ci-deploy.sh` が以下を冪等に実行します。
+
+- D1 / KV / R2 がなければ作成し、ID を `wrangler.jsonc` に差し込んでビルド
+- D1 マイグレーション → デプロイ → Worker シークレット（`JWT_SECRET` / `TAG_KEY_SECRET`）の初回生成
+- 初回のみ `SETUP_TOKEN` を生成してデモテナントを作成し、認証情報を `deploy/operator.pub.pem` の公開鍵で暗号化してログに出力（公開リポジトリでも平文は残りません。対応する秘密鍵は運営者のみが保持）
+
+**手元から（代替）**: `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` を設定して `./scripts/provision.sh`。
+
+テナント追加:
    ```bash
    curl -X POST https://<host>/api/auth/setup -H 'content-type: application/json' \
      -d '{"token":"<SETUP_TOKEN>","orgName":"株式会社○○","orgCode":"ABC","siteName":"本社ビル","adminName":"山田","email":"...","password":"..."}'
    ```
-4. 以降は `main` への push で GitHub Actions がテスト → マイグレーション → デプロイ（リポジトリの Secrets に `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`）
 
 ## NTAG 424 DNA の設定（暗号タグ）
 
