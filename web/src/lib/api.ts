@@ -24,7 +24,7 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
   const data = ct.includes("application/json") ? await res.json() : await res.text();
   if (!res.ok) {
     const d = data as { error?: string; code?: string };
-    if (res.status === 401 && !path.startsWith("/auth/")) window.dispatchEvent(new Event("it:unauthorized"));
+    if (res.status === 401 && !path.startsWith("/auth/") && !path.startsWith("/ops")) window.dispatchEvent(new Event("it:unauthorized"));
     throw new ApiError(res.status, d?.error ?? `エラー (${res.status})`, d?.code ?? null);
   }
   return data as T;

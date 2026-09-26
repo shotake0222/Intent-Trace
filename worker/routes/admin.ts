@@ -2,9 +2,11 @@
 import { z } from "zod";
 import { createRouter, body, fail, newId, now, audit, assertSiteInOrg, parseJson } from "../lib/app";
 import { requireAuth, requireRole } from "../lib/auth";
-import { hashPassword, randomToken, sha256Hex, sealSecret, shortId } from "../lib/crypto";
+import { hashPassword, randomToken, sha256Hex, sealSecret, openSecret, shortId } from "../lib/crypto";
 import { invalidateTag, invalidateTagsForEquipment } from "../lib/tags";
 import { lockStub, deadmanStub } from "../lib/domain";
+import { assertLimit, assertFeature } from "../lib/platform";
+import { verifySun, SunError } from "../lib/sun";
 
 const r = createRouter();
 r.use("*", requireAuth, requireRole("admin", "manager"));
@@ -22,6 +24,7 @@ r.get("/sites", async (c) => {
 
 r.post("/sites", adminOnly, async (c) => {
   const u = c.get("user");
+  await assertLimit(c.env, u.orgId, "sites");
   const b = await body(c, z.object({ name: z.string().min(1), address: optStr }));
   const id = newId();
   await c.env.DB.prepare("INSERT INTO sites (id, org_id, name, address, created_at) VALUES (?,?,?,?,?)").bind(id, u.orgId, b.name, b.address, now()).run();
@@ -82,6 +85,7 @@ const userSchema = z.object({
 r.post("/users", adminOnly, async (c) => {
   const u = c.get("user");
   const b = await body(c, userSchema);
+  await assertLimit(c.env, u.orgId, "users");
   if (b.role !== "worker" && !b.email) fail(422, "管理者・マネージャーにはメールアドレスが必要です");
   if (b.role !== "worker" && b.secret.length < 8) fail(422, "パスワードは8文字以上にしてください");
   const id = newId();
@@ -108,10 +112,14 @@ r.patch("/users/:id", adminOnly, async (c) => {
   if (b.role !== undefined) (sets.push("role = ?"), vals.push(b.role));
   if (b.email !== undefined) (sets.push("email = ?"), vals.push(b.email?.toLowerCase() ?? null));
   if (b.employeeCode !== undefined) (sets.push("employee_code = ?"), vals.push(b.employeeCode));
-  if (b.secret) (sets.push("password_hash = ?"), vals.push(await hashPassword(b.secret)));
+  if (b.secret) (sets.push("password_hash = ?", "token_version = token_version + 1"), vals.push(await hashPassword(b.secret)));
   if (b.badgeUid !== undefined) (sets.push("badge_uid = ?"), vals.push(b.badgeUid?.replace(/[^0-9a-fA-F]/g, "").toUpperCase() || null));
   if (b.bleId !== undefined) (sets.push("ble_id = ?"), vals.push(b.bleId));
-  if (b.active !== undefined) (sets.push("active = ?"), vals.push(b.active ? 1 : 0));
+  if (b.active !== undefined) {
+    if (b.active) await assertLimit(c.env, u.orgId, "users");
+    sets.push("active = ?");
+    vals.push(b.active ? 1 : 0);
+  }
   if (!sets.length) return c.json({ ok: true });
   const res = await c.env.DB.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ? AND org_id = ?`).bind(...vals, id, u.orgId).run();
   if (!res.meta.changes) fail(404, "ユーザーが見つかりません");
@@ -267,6 +275,8 @@ r.post("/tags", async (c) => {
   const u = c.get("user");
   const b = await body(c, tagSchema);
   await assertSiteInOrg(c.env, b.siteId, u.orgId);
+  await assertLimit(c.env, u.orgId, "tags");
+  if (b.security === "sun") await assertFeature(c.env, u.orgId, "sun", "暗号タグ鍵の手動登録");
   if (b.kind === "equipment" && !b.equipmentId) fail(422, "設備タグには設備の指定が必要です");
   if (b.security === "sun" && (!b.sunMetaKey || !b.sunFileKey)) fail(422, "SUNタグには SDMMetaReadKey と SDMFileReadKey が必要です");
   const id = shortId(10);
@@ -316,6 +326,164 @@ r.patch("/tags/:id", async (c) => {
   if (!res.meta.changes) fail(404, "タグが見つかりません");
   await invalidateTag(c.env, c.req.param("id"));
   await audit(c.env, u.orgId, u.id, "tag.update", "tag", c.req.param("id"), { fields: Object.keys(b).filter((k) => !k.startsWith("sun")) });
+  return c.json({ ok: true });
+});
+
+// ===== 受領タグ（運営から出荷されたハードウェア）の登録 =====
+const normCode = (s: string) => s.replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+
+r.get("/tag-stock", async (c) => {
+  const u = c.get("user");
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.id, s.item_type, s.chip, s.uid, s.status, s.allocated_at, s.shipment_note, s.registered_at, s.registered_user_id, us.name AS user_name, t.label AS tag_label
+       FROM tag_stock s LEFT JOIN users us ON us.id = s.registered_user_id LEFT JOIN tags t ON t.id = s.id
+      WHERE s.org_id = ? AND s.status IN ('allocated','registered') ORDER BY s.status, s.allocated_at DESC, s.id`
+  )
+    .bind(u.orgId)
+    .all();
+  return c.json(results);
+});
+
+r.get("/tag-stock/:code", async (c) => {
+  const u = c.get("user");
+  const s = await c.env.DB.prepare("SELECT id, item_type, chip, uid, status FROM tag_stock WHERE id = ? AND org_id = ?").bind(normCode(c.req.param("code")), u.orgId).first();
+  if (!s) fail(404, "この登録コードのタグは貴社に出荷されていません");
+  return c.json(s);
+});
+
+interface StockRow {
+  id: string;
+  item_type: "location_tag" | "badge";
+  chip: string;
+  uid: string | null;
+  sun_meta_key: string | null;
+  sun_file_key: string | null;
+  status: string;
+}
+
+async function loadStock(env: Env, code: string, orgId: string) {
+  const s = await env.DB.prepare("SELECT id, item_type, chip, uid, sun_meta_key, sun_file_key, status FROM tag_stock WHERE id = ? AND org_id = ?")
+    .bind(normCode(code), orgId)
+    .first<StockRow>();
+  if (!s) fail(404, "この登録コードのタグは貴社に出荷されていません");
+  if (s.status === "registered") fail(409, "このタグは既に登録済みです");
+  if (s.status !== "allocated") fail(409, "このタグは使用できません（廃棄済み）");
+  return s;
+}
+
+const registerSchema = z.object({
+  stockId: z.string().min(4),
+  siteId: z.string(),
+  zoneId: optStr,
+  kind: z.enum(["checkpoint", "equipment", "procedure_step", "deadman"]),
+  label: z.string().min(1),
+  equipmentId: optStr,
+  // 現地でタッチして登録する場合の SUN パラメータ（暗号タグの実在確認）
+  sun: z.object({ picc: z.string().regex(/^[0-9A-Fa-f]{32}$/), cmac: z.string().regex(/^[0-9A-Fa-f]{16}$/) }).optional(),
+  serial: z.string().max(64).optional()
+});
+
+/** 受領済みタグを設置場所・設備に紐付けて稼働させる（現場でのタッチ登録にも使用） */
+r.post("/tags/register", async (c) => {
+  const u = c.get("user");
+  const b = await body(c, registerSchema);
+  await assertSiteInOrg(c.env, b.siteId, u.orgId);
+  if (b.kind === "equipment" && !b.equipmentId) fail(422, "設備タグには設備の指定が必要です");
+  const s = await loadStock(c.env, b.stockId, u.orgId);
+  if (s.item_type !== "location_tag") fail(422, "社員証は「作業員・資格」画面でユーザーに割り当ててください");
+  await assertLimit(c.env, u.orgId, "tags");
+  let uid = s.uid;
+  let lastCtr = -1;
+  if (b.sun && s.sun_meta_key && s.sun_file_key) {
+    try {
+      const v = await verifySun(b.sun.picc, b.sun.cmac, await openSecret(s.sun_meta_key, c.env.TAG_KEY_SECRET), await openSecret(s.sun_file_key, c.env.TAG_KEY_SECRET));
+      if (uid && uid !== v.uid) fail(403, "登録情報と異なる物理タグです");
+      uid = v.uid;
+      lastCtr = v.counter;
+    } catch (e) {
+      if (e instanceof SunError) fail(403, `タグの真正性を確認できません: ${e.message}`, "sun_invalid");
+      throw e;
+    }
+  }
+  if (b.serial) {
+    const serial = b.serial.replace(/[^0-9a-fA-F]/g, "").toUpperCase();
+    if (uid && serial && uid !== serial) fail(409, "登録コードと物理タグが一致しません。別のタグをかざしていないか確認してください");
+    if (!uid && serial) {
+      const dup = await c.env.DB.prepare("SELECT id FROM tag_stock WHERE uid = ? AND id != ?").bind(serial, s.id).first();
+      if (dup) fail(409, "このタグ（UID）は別の登録コードで管理されています");
+      uid = serial;
+    }
+  }
+  const t = now();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO tags (id, org_id, site_id, zone_id, kind, label, equipment_id, security, uid, sun_meta_key, sun_file_key, sun_last_ctr, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(s.id, u.orgId, b.siteId, b.zoneId, b.kind, b.label, b.equipmentId, s.sun_meta_key ? "sun" : "static", uid, s.sun_meta_key, s.sun_file_key, lastCtr, t),
+    c.env.DB.prepare("UPDATE tag_stock SET status = 'registered', registered_at = ?, uid = COALESCE(uid, ?) WHERE id = ?").bind(t, uid, s.id)
+  ]);
+  await invalidateTag(c.env, s.id);
+  await audit(c.env, u.orgId, u.id, "tag.register", "tag", s.id, { kind: b.kind, label: b.label, viaTouch: !!(b.sun || b.serial) });
+  return c.json({ id: s.id });
+});
+
+/** 破損・紛失したタグを新しいタグに交換（巡回ルート・手順・デバイスの紐付けを引き継ぐ） */
+r.post("/tags/:id/replace", async (c) => {
+  const u = c.get("user");
+  const b = await body(c, z.object({ stockId: z.string().min(4), reason: z.string().max(200).optional() }));
+  const old = await c.env.DB.prepare("SELECT * FROM tags WHERE id = ? AND org_id = ?").bind(c.req.param("id"), u.orgId).first<{
+    id: string;
+    site_id: string;
+    zone_id: string | null;
+    kind: string;
+    label: string;
+    equipment_id: string | null;
+  }>();
+  if (!old) fail(404, "タグが見つかりません");
+  const s = await loadStock(c.env, b.stockId, u.orgId);
+  if (s.item_type !== "location_tag") fail(422, "設置タグを指定してください");
+  const t = now();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO tags (id, org_id, site_id, zone_id, kind, label, equipment_id, security, uid, sun_meta_key, sun_file_key, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).bind(s.id, u.orgId, old.site_id, old.zone_id, old.kind, old.label, old.equipment_id, s.sun_meta_key ? "sun" : "static", s.uid, s.sun_meta_key, s.sun_file_key, t),
+    c.env.DB.prepare("UPDATE tag_stock SET status = 'registered', registered_at = ? WHERE id = ?").bind(t, s.id),
+    c.env.DB.prepare("UPDATE patrol_route_points SET tag_id = ? WHERE tag_id = ?").bind(s.id, old.id),
+    c.env.DB.prepare("UPDATE procedure_steps SET tag_id = ? WHERE tag_id = ?").bind(s.id, old.id),
+    c.env.DB.prepare("UPDATE devices SET tag_id = ? WHERE tag_id = ?").bind(s.id, old.id),
+    c.env.DB.prepare("UPDATE tags SET active = 0, label = label || '（交換済）' WHERE id = ?").bind(old.id),
+    c.env.DB.prepare("UPDATE tag_stock SET status = 'retired', note = ? WHERE id = ?").bind(`交換: ${b.reason ?? ""} → ${s.id}`, old.id)
+  ]);
+  await invalidateTag(c.env, old.id);
+  await audit(c.env, u.orgId, u.id, "tag.replace", "tag", old.id, { newTagId: s.id, reason: b.reason });
+  return c.json({ id: s.id });
+});
+
+/** スマート社員証（受領在庫）をユーザーに割り当て / 解除 */
+r.put("/users/:id/badge", async (c) => {
+  const u = c.get("user");
+  const b = await body(c, z.object({ stockId: z.string().nullable() }));
+  const target = await c.env.DB.prepare("SELECT id, badge_uid FROM users WHERE id = ? AND org_id = ?").bind(c.req.param("id"), u.orgId).first<{ id: string; badge_uid: string | null }>();
+  if (!target) fail(404, "ユーザーが見つかりません");
+  const t = now();
+  const stmts: D1PreparedStatement[] = [
+    // 既存の割当を在庫に戻す
+    c.env.DB.prepare("UPDATE tag_stock SET status = 'allocated', registered_user_id = NULL, registered_at = NULL WHERE registered_user_id = ? AND org_id = ?").bind(target.id, u.orgId)
+  ];
+  if (b.stockId) {
+    const s = await loadStock(c.env, b.stockId, u.orgId);
+    if (s.item_type !== "badge") fail(422, "社員証を指定してください");
+    if (!s.uid) fail(422, "この社員証はUIDが未登録です。運営にお問い合わせください");
+    stmts.push(
+      c.env.DB.prepare("UPDATE users SET badge_uid = ? WHERE id = ?").bind(s.uid, target.id),
+      c.env.DB.prepare("UPDATE tag_stock SET status = 'registered', registered_user_id = ?, registered_at = ? WHERE id = ?").bind(target.id, t, s.id)
+    );
+  } else {
+    stmts.push(c.env.DB.prepare("UPDATE users SET badge_uid = NULL WHERE id = ?").bind(target.id));
+  }
+  await c.env.DB.batch(stmts);
+  await audit(c.env, u.orgId, u.id, b.stockId ? "badge.assign" : "badge.unassign", "user", target.id, { stockId: b.stockId });
   return c.json({ ok: true });
 });
 
@@ -412,6 +580,7 @@ r.get("/devices", async (c) => {
 
 r.post("/devices", adminOnly, async (c) => {
   const u = c.get("user");
+  await assertFeature(c.env, u.orgId, "devices", "IoTデバイス連携");
   const b = await body(c, z.object({ siteId: z.string(), kind: z.enum(["ble_receiver", "nfc_reader"]), name: z.string().min(1), equipmentId: optStr, tagId: optStr }));
   await assertSiteInOrg(c.env, b.siteId, u.orgId);
   const id = `dev_${shortId(12)}`;

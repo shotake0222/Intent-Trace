@@ -1,5 +1,6 @@
 // 現場（作業員PWA）向け API
 import { z } from "zod";
+import { HTTPException } from "hono/http-exception";
 import { createRouter, body, fail, newId, now, audit, raiseAlert, broadcast, assertSiteInOrg } from "../lib/app";
 import { requireAuth } from "../lib/auth";
 import { loadTag, evaluateAssurance } from "../lib/tags";
@@ -25,6 +26,15 @@ const UNLOCK_WINDOW = 5 * 60 * 1000; // バーチャルキーはタップから5
 
 async function tagForUser(env: Env, tagId: string, orgId: string) {
   const tag = await loadTag(env, tagId);
+  if (!tag) {
+    // 運営から出荷済みで未登録のタグ → 管理者/マネージャーはその場で登録できる
+    const stock = await env.DB.prepare("SELECT id, item_type, chip, status FROM tag_stock WHERE id = ? AND org_id = ?").bind(tagId, orgId).first<{ id: string; item_type: string; chip: string; status: string }>();
+    if (stock && stock.status === "allocated") {
+      throw new HTTPException(404, {
+        res: Response.json({ error: "このタグはまだ設置場所に登録されていません", code: "tag_unregistered", stock: { id: stock.id, itemType: stock.item_type, chip: stock.chip } }, { status: 404 })
+      });
+    }
+  }
   if (!tag || tag.org_id !== orgId) fail(404, "このタグは登録されていないか、別の会社のタグです");
   if (!tag.active) fail(404, "このタグは無効化されています");
   return tag;

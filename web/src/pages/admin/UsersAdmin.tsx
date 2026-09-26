@@ -4,7 +4,7 @@ import { useAuth } from "../../lib/auth";
 import { ApiError, del, patch, post, put } from "../../lib/api";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Select } from "../../components/ui";
 import { Modal } from "../../components/Modal";
-import { fmtDate } from "../../lib/format";
+import { fmtDate, tagCode } from "../../lib/format";
 
 interface UserRow {
   id: string;
@@ -31,6 +31,7 @@ export default function UsersAdmin() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [grantFor, setGrantFor] = useState<UserRow | null>(null);
+  const [badgeFor, setBadgeFor] = useState<UserRow | null>(null);
   const [newQual, setNewQual] = useState({ code: "", name: "" });
   const [err, setErr] = useState<string | null>(null);
   const isAdmin = me?.role === "admin";
@@ -102,6 +103,9 @@ export default function UsersAdmin() {
                       {u.ble_id ?? "—"}
                     </td>
                     <td className="text-right whitespace-nowrap">
+                      <Button variant="ghost" size="sm" onClick={() => setBadgeFor(u)}>
+                        社員証
+                      </Button>
                       {isAdmin && (
                         <>
                           <Button variant="ghost" size="sm" onClick={() => setEditing(u)}>
@@ -170,6 +174,7 @@ export default function UsersAdmin() {
           }}
         />
       )}
+      {badgeFor && <BadgeModal user={badgeFor} onClose={() => setBadgeFor(null)} onSaved={() => (setBadgeFor(null), void users.reload())} />}
       {grantFor && <GrantModal user={grantFor} quals={quals.data ?? []} onClose={() => setGrantFor(null)} onSaved={() => (setGrantFor(null), void users.reload())} />}
     </div>
   );
@@ -287,6 +292,59 @@ function GrantModal({ user, quals, onClose, onSaved }: { user: UserRow; quals: Q
         >
           付与する
         </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function BadgeModal({ user, onClose, onSaved }: { user: UserRow; onClose: () => void; onSaved: () => void }) {
+  const stock = useApi<{ id: string; item_type: string; uid: string | null; status: string; registered_user_id: string | null }[]>("/admin/tag-stock");
+  const badges = (stock.data ?? []).filter((s) => s.item_type === "badge");
+  const current = badges.find((b) => b.registered_user_id === user.id);
+  const free = badges.filter((b) => b.status === "allocated");
+  const [stockId, setStockId] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const save = async (id: string | null) => {
+    try {
+      await put(`/admin/users/${user.id}/badge`, { stockId: id });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    }
+  };
+  return (
+    <Modal open onClose={onClose} title={`スマート社員証: ${user.name}`}>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">運営から届いた社員証を割り当てると、固定NFCリーダー（プランB）でのタッチ打刻・資格判定に使えます。</p>
+        {current ? (
+          <Alert tone="green">
+            割当中: <span className="font-mono">{tagCode(current.id)}</span>（UID {current.uid}）
+          </Alert>
+        ) : user.badge_uid ? (
+          <Alert tone="blue">手入力のUID: {user.badge_uid}</Alert>
+        ) : null}
+        <Field label="割り当てる社員証">
+          <Select value={stockId} onChange={(e) => setStockId(e.target.value)}>
+            <option value="">選択</option>
+            {free.map((b) => (
+              <option key={b.id} value={b.id} disabled={!b.uid}>
+                {tagCode(b.id)} {b.uid ? "" : "（UID未登録）"}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {!free.length && <p className="text-xs text-slate-500">割当可能な社員証がありません。「契約・サポート」から追加をご依頼ください。</p>}
+        {err && <Alert>{err}</Alert>}
+        <div className="flex gap-2">
+          <Button className="flex-1" disabled={!stockId} onClick={() => void save(stockId)}>
+            割り当てる
+          </Button>
+          {(current || user.badge_uid) && (
+            <Button variant="outline" onClick={() => void save(null)}>
+              解除
+            </Button>
+          )}
+        </div>
       </div>
     </Modal>
   );

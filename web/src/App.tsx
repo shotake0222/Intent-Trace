@@ -21,6 +21,14 @@ import WorkflowsAdmin from "./pages/admin/WorkflowsAdmin";
 import DevicesAdmin from "./pages/admin/DevicesAdmin";
 import Records from "./pages/admin/Records";
 import SitesAdmin from "./pages/admin/SitesAdmin";
+import AccountAdmin from "./pages/admin/AccountAdmin";
+import OpsLayout, { OpsLogin } from "./pages/ops/OpsLayout";
+import OpsDashboard from "./pages/ops/OpsDashboard";
+import OpsTenants from "./pages/ops/OpsTenants";
+import OpsTenantDetail from "./pages/ops/OpsTenantDetail";
+import OpsStock from "./pages/ops/OpsStock";
+import OpsBilling from "./pages/ops/OpsBilling";
+import { OpsAnnouncements, OpsAudit, OpsPlans, OpsSettings, OpsSupport } from "./pages/ops/OpsMisc";
 
 function RequireAuth({ children, admin }: { children: React.ReactNode; admin?: boolean }) {
   const { me, loading } = useAuth();
@@ -73,6 +81,20 @@ export default function App() {
         <Route path="devices" element={<DevicesAdmin />} />
         <Route path="records" element={<Records />} />
         <Route path="sites" element={<SitesAdmin />} />
+        <Route path="account" element={<AccountAdmin />} />
+      </Route>
+      <Route path="ops/login" element={<OpsLogin />} />
+      <Route path="ops" element={<OpsLayout />}>
+        <Route index element={<OpsDashboard />} />
+        <Route path="tenants" element={<OpsTenants />} />
+        <Route path="tenants/:id" element={<OpsTenantDetail />} />
+        <Route path="stock" element={<OpsStock />} />
+        <Route path="billing" element={<OpsBilling />} />
+        <Route path="plans" element={<OpsPlans />} />
+        <Route path="announcements" element={<OpsAnnouncements />} />
+        <Route path="support" element={<OpsSupport />} />
+        <Route path="settings" element={<OpsSettings />} />
+        <Route path="audit" element={<OpsAudit />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

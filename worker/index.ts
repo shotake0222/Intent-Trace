@@ -11,6 +11,8 @@ import device from "./routes/device";
 import admin from "./routes/admin";
 import analytics from "./routes/analytics";
 import reports from "./routes/reports";
+import ops from "./routes/ops";
+import account from "./routes/account";
 
 export { EquipmentLock } from "./do/EquipmentLock";
 export { DeadmanTimer } from "./do/DeadmanTimer";
@@ -36,6 +38,8 @@ app.route("/api/device", device);
 app.route("/api/admin", admin);
 app.route("/api/analytics", analytics);
 app.route("/api/reports", reports);
+app.route("/api/ops", ops);
+app.route("/api/account", account);
 app.route("/api", field);
 
 // ダッシュボードのリアルタイム購読

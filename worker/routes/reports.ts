@@ -1,9 +1,13 @@
 // 元請け・オーナー向けレポート（印刷用HTML → ブラウザでPDF保存）と CSV エクスポート
 import { createRouter, fail } from "../lib/app";
 import { requireAuth, requireRole } from "../lib/auth";
+import { assertFeature } from "../lib/platform";
 
 const r = createRouter();
-r.use("*", requireAuth, requireRole("admin", "manager"));
+r.use("*", requireAuth, requireRole("admin", "manager"), async (c, next) => {
+  await assertFeature(c.env, c.get("user").orgId, "reports", "レポート出力");
+  await next();
+});
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);

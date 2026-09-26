@@ -45,12 +45,12 @@ export default function FieldLayout() {
         <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
           <Link to="/" className="flex items-center gap-2">
             <img src="/icon.svg" className="h-8 w-8" alt="" />
-            <div className="leading-tight">
-              <div className="text-sm font-bold">{me?.name}</div>
-              <div className="text-xs text-slate-400">{me?.orgName}</div>
+            <div className="min-w-0 leading-tight">
+              <div className="truncate text-sm font-bold">{me?.name}</div>
+              <div className="max-w-[9rem] truncate text-xs text-slate-400">{me?.orgName}</div>
             </div>
           </Link>
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex shrink-0 items-center gap-1.5 text-xs whitespace-nowrap">
             {(pending > 0 || failed > 0) && (
               <button onClick={() => void syncQueue()} className={cx("rounded-full px-2.5 py-1 font-semibold", failed ? "bg-red-500" : "bg-amber-500 text-slate-900")}>
                 未送信 {pending + failed}
@@ -58,7 +58,8 @@ export default function FieldLayout() {
             )}
             <span className={cx("flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold", online ? "bg-emerald-600/30 text-emerald-300" : "bg-red-600/40 text-red-200")}>
               <span className={cx("h-2 w-2 rounded-full", online ? "bg-emerald-400" : "bg-red-400")} />
-              {online ? "オンライン" : "オフライン"}
+              <span className="hidden sm:inline">{online ? "オンライン" : "オフライン"}</span>
+              <span className="sm:hidden">{online ? "接続" : "圏外"}</span>
             </span>
             {me?.role !== "worker" && (
               <Link to="/admin" className="rounded-full bg-slate-700 px-2.5 py-1 font-semibold">

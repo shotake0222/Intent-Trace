@@ -5,7 +5,111 @@ import { ApiError, patch, post } from "../../lib/api";
 import { webNfcSupported, writeUrl } from "../../lib/nfc";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Select } from "../../components/ui";
 import { Modal } from "../../components/Modal";
-import { TAG_KIND_LABEL, fmtAgo } from "../../lib/format";
+import { TAG_KIND_LABEL, fmtAgo, tagCode } from "../../lib/format";
+import { TagRegisterForm } from "../../components/TagRegisterForm";
+import { get, ApiError as ApiErr } from "../../lib/api";
+import { parseTagUrl, scanOnce } from "../../lib/nfc";
+
+interface StockRow {
+  id: string;
+  item_type: string;
+  chip: string;
+  status: string;
+}
+
+/** 登録コードの入力 or Android でタグを読み取って在庫を特定 */
+function PickStock({ onPick }: { onPick: (id: string) => void }) {
+  const [code, setCode] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const lookup = async (c: string) => {
+    setErr(null);
+    try {
+      const s = await get<StockRow>(`/admin/tag-stock/${encodeURIComponent(c)}`);
+      if (s.status !== "allocated") throw new Error(s.status === "registered" ? "このタグは既に登録済みです" : "このタグは使用できません");
+      if (s.item_type !== "location_tag") throw new Error("社員証は「作業員・資格」画面で割り当ててください");
+      onPick(s.id);
+    } catch (e) {
+      setErr(e instanceof ApiErr ? e.message : (e as Error).message);
+    }
+  };
+  return (
+    <div className="space-y-4">
+      <Field label="登録コード（タグのラベルに印字された10桁）">
+        <Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="ABCDE-12345" className="font-mono text-lg" />
+      </Field>
+      <Button className="w-full" disabled={code.replace(/[^0-9A-Z]/g, "").length < 8} onClick={() => void lookup(code)}>
+        次へ
+      </Button>
+      {webNfcSupported && (
+        <Button
+          variant="outline"
+          className="w-full"
+          disabled={scanning}
+          onClick={async () => {
+            setScanning(true);
+            try {
+              const r = await scanOnce(new AbortController().signal);
+              const p = r.url ? parseTagUrl(r.url) : null;
+              if (!p) throw new Error("Intent-Trace のタグではありません");
+              await lookup(p.tagId);
+            } catch (e) {
+              setErr((e as Error).message);
+            } finally {
+              setScanning(false);
+            }
+          }}
+        >
+          {scanning ? "タグをかざしてください…" : "タグを読み取って特定（Android）"}
+        </Button>
+      )}
+      {err && <Alert>{err}</Alert>}
+    </div>
+  );
+}
+
+function ReplaceTag({ tag, candidates, onClose, onDone }: { tag: TagRow; candidates: StockRow[]; onClose: () => void; onDone: () => void }) {
+  const [stockId, setStockId] = useState("");
+  const [reason, setReason] = useState("破損");
+  const [err, setErr] = useState<string | null>(null);
+  return (
+    <Modal open onClose={onClose} title={`タグ交換: ${tag.label}`}>
+      <div className="space-y-4">
+        <Alert tone="blue">破損・紛失したタグを新しいタグに置き換えます。巡回ルート・作業手順・固定リーダーの設定は新しいタグに自動で引き継がれ、古いタグは無効になります。</Alert>
+        <Field label="新しいタグの登録コード">
+          <Input value={stockId} onChange={(e) => setStockId(e.target.value.toUpperCase())} list="stock-candidates" className="font-mono" placeholder="ABCDE-12345" />
+          <datalist id="stock-candidates">
+            {candidates.map((c) => (
+              <option key={c.id} value={c.id} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="理由">
+          <Select value={reason} onChange={(e) => setReason(e.target.value)}>
+            {["破損", "紛失", "剥がれ", "読み取り不良", "設置場所変更", "その他"].map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </Select>
+        </Field>
+        {err && <Alert>{err}</Alert>}
+        <Button
+          className="w-full"
+          disabled={stockId.replace(/[^0-9A-Z]/g, "").length < 8}
+          onClick={async () => {
+            try {
+              await post(`/admin/tags/${tag.id}/replace`, { stockId: stockId.replace(/[^0-9A-Z]/g, ""), reason });
+              onDone();
+            } catch (e) {
+              setErr(e instanceof ApiError ? e.message : String(e));
+            }
+          }}
+        >
+          交換する
+        </Button>
+      </div>
+    </Modal>
+  );
+}
 
 interface TagRow {
   id: string;
@@ -29,19 +133,61 @@ export default function TagsAdmin() {
   const equipment = useApi<{ id: string; name: string }[]>(`/admin/equipment?siteId=${siteId}`, [siteId]);
   const [creating, setCreating] = useState(false);
   const [writing, setWriting] = useState<TagRow | null>(null);
-  const rows = (tags.data ?? []).filter((t) => t.site_id === siteId);
+  const stock = useApi<StockRow[]>("/admin/tag-stock");
+  const [registering, setRegistering] = useState<string | "pick" | null>(null);
+  const [replacing, setReplacing] = useState<TagRow | null>(null);
+  const [showActive, setShowActive] = useState(true);
+  const rows = (tags.data ?? []).filter((t) => t.site_id === siteId && (!showActive || t.active));
+  const unregistered = (stock.data ?? []).filter((s) => s.status === "allocated" && s.item_type === "location_tag");
+  const reloadAll = () => {
+    void tags.reload();
+    void stock.reload();
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">NFCタグ（仮想ビーコン）</h1>
-        <Button onClick={() => setCreating(true)}>＋ タグを登録</Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setRegistering("pick")}>＋ 受領タグを登録</Button>
+          <Button variant="outline" onClick={() => setCreating(true)}>
+            持ち込みタグ
+          </Button>
+        </div>
       </div>
+      <Card
+        title={`未登録の受領タグ（${unregistered.length}枚）`}
+        action={<span className="text-xs text-slate-500">運営から届いたタグです。貼り付けた場所でスマホをタッチするか、登録コードを入力して登録します</span>}
+      >
+        {!unregistered.length ? (
+          <Empty>未登録のタグはありません。追加が必要な場合は「契約・サポート」からご依頼ください</Empty>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {unregistered.slice(0, 60).map((s) => (
+              <button key={s.id} onClick={() => setRegistering(s.id)} className="rounded-lg bg-slate-100 px-3 py-1.5 font-mono text-sm hover:bg-slate-200">
+                {tagCode(s.id)}
+                {s.chip === "ntag424" ? <span className="ml-1 text-xs text-emerald-700">暗号</span> : null}
+              </button>
+            ))}
+            {unregistered.length > 60 && <span className="self-center text-sm text-slate-500">ほか {unregistered.length - 60} 枚</span>}
+          </div>
+        )}
+        <p className="mt-3 text-xs text-slate-500">
+          💡 いちばん簡単なのは、タグを貼った場所で<b>管理者アカウントのスマホをタッチ</b>する方法です。その場で登録画面が開きます。
+        </p>
+      </Card>
       <Alert tone="blue">
         タグには <b>URL だけ</b> を書き込みます。タグ自体は識別子しか持たず、巡回・点検・権限などの状態はすべてクラウド側で管理されます。
         暗号付きタグ（NTAG 424 DNA）はタッチごとに一回限りの署名付きURLを生成するため、URLの複製による不正打刻を防げます。
       </Alert>
-      <Card>
+      <Card
+        title="稼働中のタグ"
+        action={
+          <label className="flex items-center gap-2 text-xs text-slate-500">
+            <input type="checkbox" checked={!showActive} onChange={(e) => setShowActive(!e.target.checked)} /> 無効・交換済みも表示
+          </label>
+        }
+      >
         {!rows.length ? (
           <Empty>タグが登録されていません</Empty>
         ) : (
@@ -70,6 +216,11 @@ export default function TagsAdmin() {
                     <td className="text-xs">{fmtAgo(t.last_tap_at)}</td>
                     <td className="font-mono text-xs text-slate-500">/t/{t.id}</td>
                     <td className="text-right whitespace-nowrap">
+                      {t.active ? (
+                        <Button variant="ghost" size="sm" onClick={() => setReplacing(t)}>
+                          交換
+                        </Button>
+                      ) : null}
                       <Button variant="ghost" size="sm" onClick={() => setWriting(t)}>
                         書き込み
                       </Button>
@@ -98,6 +249,18 @@ export default function TagsAdmin() {
         />
       )}
       {writing && <WriteTag tag={writing} onClose={() => setWriting(null)} />}
+      {registering && (
+        <Modal open onClose={() => setRegistering(null)} title="受領タグを登録">
+          {registering === "pick" ? (
+            <PickStock
+              onPick={(id) => setRegistering(id)}
+            />
+          ) : (
+            <TagRegisterForm stockId={registering} defaultSiteId={siteId} onDone={() => (setRegistering(null), reloadAll())} />
+          )}
+        </Modal>
+      )}
+      {replacing && <ReplaceTag tag={replacing} candidates={unregistered} onClose={() => setReplacing(null)} onDone={() => (setReplacing(null), reloadAll())} />}
     </div>
   );
 }

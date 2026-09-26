@@ -2,6 +2,13 @@ import { z } from "zod";
 import { createRouter, body, fail, newId, now, audit } from "../lib/app";
 import { issueSession, clearSession, requireAuth } from "../lib/auth";
 import { hashPassword, verifyPassword, timingSafeEqual, enc } from "../lib/crypto";
+import { getContract, contractBlockReason } from "../lib/platform";
+
+async function assertContract(env: Env, orgId: string) {
+  const c = await getContract(env, orgId);
+  const reason = contractBlockReason(c);
+  if (reason) fail(403, reason, "contract_blocked");
+}
 import type { Me } from "../../shared/types";
 
 const r = createRouter();
@@ -20,14 +27,15 @@ r.post("/login", async (c) => {
   const b = await body(c, z.object({ email: z.string().email(), password: z.string().min(1) }));
   const email = b.email.toLowerCase();
   await checkRate(c.env, `login:${email}`);
-  const u = await c.env.DB.prepare("SELECT id, org_id, role, name, password_hash, active FROM users WHERE email = ?")
+  const u = await c.env.DB.prepare("SELECT id, org_id, role, name, password_hash, active, token_version FROM users WHERE email = ?")
     .bind(email)
-    .first<{ id: string; org_id: string; role: "admin" | "manager" | "worker"; name: string; password_hash: string; active: number }>();
+    .first<{ id: string; org_id: string; role: "admin" | "manager" | "worker"; name: string; password_hash: string; active: number; token_version: number }>();
   if (!u || !u.active || !(await verifyPassword(b.password, u.password_hash))) {
     await bumpRate(c.env, `login:${email}`);
     fail(401, "メールアドレスまたはパスワードが違います");
   }
-  await issueSession(c, { id: u.id, orgId: u.org_id, role: u.role, name: u.name });
+  await assertContract(c.env, u.org_id);
+  await issueSession(c, { id: u.id, orgId: u.org_id, role: u.role, name: u.name }, { tokenVersion: u.token_version });
   return c.json({ ok: true });
 });
 
@@ -37,16 +45,31 @@ r.post("/worker-login", async (c) => {
   const rk = `wlogin:${b.orgCode}:${b.employeeCode}`;
   await checkRate(c.env, rk);
   const u = await c.env.DB.prepare(
-    `SELECT u.id, u.org_id, u.role, u.name, u.password_hash, u.active FROM users u JOIN organizations o ON o.id = u.org_id
+    `SELECT u.id, u.org_id, u.role, u.name, u.password_hash, u.active, u.token_version FROM users u JOIN organizations o ON o.id = u.org_id
       WHERE o.code = ? AND u.employee_code = ?`
   )
     .bind(b.orgCode.toUpperCase(), b.employeeCode)
-    .first<{ id: string; org_id: string; role: "admin" | "manager" | "worker"; name: string; password_hash: string; active: number }>();
+    .first<{ id: string; org_id: string; role: "admin" | "manager" | "worker"; name: string; password_hash: string; active: number; token_version: number }>();
   if (!u || !u.active || !(await verifyPassword(b.pin, u.password_hash))) {
     await bumpRate(c.env, rk);
     fail(401, "会社コード・社員番号・PINのいずれかが違います");
   }
-  await issueSession(c, { id: u.id, orgId: u.org_id, role: u.role, name: u.name });
+  await assertContract(c.env, u.org_id);
+  await issueSession(c, { id: u.id, orgId: u.org_id, role: u.role, name: u.name }, { tokenVersion: u.token_version });
+  return c.json({ ok: true });
+});
+
+// 自分のパスワード/PIN変更（他端末のセッションも失効）
+r.post("/change-password", requireAuth, async (c) => {
+  const u = c.get("user");
+  if (u.impersonatedBy) fail(403, "代理ログイン中はパスワードを変更できません");
+  const b = await body(c, z.object({ current: z.string().min(1), next: z.string().min(4).max(128) }));
+  const row = await c.env.DB.prepare("SELECT role, password_hash, token_version FROM users WHERE id = ?").bind(u.id).first<{ role: string; password_hash: string; token_version: number }>();
+  if (!row || !(await verifyPassword(b.current, row.password_hash))) fail(401, "現在のパスワードが違います");
+  if (row.role !== "worker" && b.next.length < 8) fail(422, "パスワードは8文字以上にしてください");
+  await c.env.DB.prepare("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(await hashPassword(b.next), u.id).run();
+  await issueSession(c, u, { tokenVersion: row.token_version + 1 });
+  await audit(c.env, u.orgId, u.id, "user.change_password", "user", u.id);
   return c.json({ ok: true });
 });
 
@@ -69,6 +92,7 @@ r.get("/me", requireAuth, async (c) => {
   )
     .bind(u.id)
     .all<{ code: string; name: string; expires_at: number | null }>();
+  const contract = await getContract(c.env, u.orgId);
   const me: Me = {
     id: row.id,
     name: row.name,
@@ -77,7 +101,12 @@ r.get("/me", requireAuth, async (c) => {
     orgName: row.org_name,
     plan: row.plan,
     employeeCode: row.employee_code,
-    qualifications: quals.map((q) => ({ code: q.code, name: q.name, expiresAt: q.expires_at }))
+    qualifications: quals.map((q) => ({ code: q.code, name: q.name, expiresAt: q.expires_at })),
+    features: contract.plan.features,
+    planName: contract.plan.name,
+    orgStatus: contract.status,
+    trialEndsAt: contract.trialEndsAt,
+    impersonatedBy: u.impersonatedBy ?? null
   };
   return c.json(me);
 });

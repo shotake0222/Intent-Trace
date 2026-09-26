@@ -35,7 +35,8 @@ const NAV = [
   { to: "/admin/workflows", label: "巡回・作業手順" },
   { to: "/admin/users", label: "作業員・資格" },
   { to: "/admin/devices", label: "IoTデバイス" },
-  { to: "/admin/sites", label: "現場・ゾーン" }
+  { to: "/admin/sites", label: "現場・ゾーン" },
+  { to: "/admin/account", label: "契約・サポート" }
 ];
 
 export default function AdminLayout() {
@@ -112,8 +113,57 @@ export default function AdminLayout() {
             </button>
           </div>
         </header>
+        {me?.impersonatedBy && (
+          <div className="bg-indigo-700 px-4 py-2 text-center text-sm font-semibold text-white">運営サポートが代理ログイン中です（操作はすべて監査ログに記録されます）</div>
+        )}
+        {me?.orgStatus === "trial" && me.trialEndsAt && (
+          <Link to="/admin/account" className="block bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
+            トライアル期間中（残り {Math.max(0, Math.ceil((me.trialEndsAt - Date.now()) / 86400000))} 日）— ご契約内容の確認はこちら
+          </Link>
+        )}
+        <Announcements />
         <main className="mx-auto max-w-7xl p-4 lg:p-8">{siteId ? <Outlet context={ctx} /> : null}</main>
       </div>
+    </div>
+  );
+}
+
+function Announcements() {
+  const { data } = useApi<{ id: string; title: string; body: string; level: string }[]>("/account/announcements");
+  const [hidden, setHidden] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("it:ann-hidden") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const shown = (data ?? []).filter((a) => !hidden.includes(a.id)).slice(0, 3);
+  if (!shown.length) return null;
+  return (
+    <div className="space-y-1 px-4 pt-3 lg:px-8">
+      {shown.map((a) => (
+        <div key={a.id} className={cx("flex items-start justify-between gap-3 rounded-xl px-4 py-2 text-sm ring-1", a.level === "important" ? "bg-red-50 ring-red-200" : a.level === "maintenance" ? "bg-amber-50 ring-amber-200" : "bg-sky-50 ring-sky-200")}>
+          <div>
+            <b>{a.level === "maintenance" ? "【メンテナンス】" : a.level === "important" ? "【重要】" : "【お知らせ】"}{a.title}</b>
+            <div className="whitespace-pre-wrap text-slate-600">{a.body}</div>
+          </div>
+          <button
+            className="text-slate-400"
+            onClick={() => {
+              const n = [...hidden, a.id];
+              setHidden(n);
+              try {
+                localStorage.setItem("it:ann-hidden", JSON.stringify(n));
+              } catch {
+                /* noop */
+              }
+            }}
+            aria-label="閉じる"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

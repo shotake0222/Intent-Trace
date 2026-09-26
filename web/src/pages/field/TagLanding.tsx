@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import type { EquipmentCard, TagResolution, TapResponse, LockState } from "../../../../shared/types";
 import { ApiError, del, get, post } from "../../lib/api";
 import { recordTap } from "../../lib/nfc";
+import { useAuth } from "../../lib/auth";
+import { TagRegisterForm } from "../../components/TagRegisterForm";
 import { Alert, Badge, Button, Card, Spinner, assuranceTone, resultTone } from "../../components/ui";
 import { ASSURANCE_LABEL, RESULT_LABEL, TAG_KIND_LABEL, fmtAgo, fmtDate, fmtDateTime } from "../../lib/format";
 
@@ -22,6 +24,9 @@ export default function TagLanding() {
   const [tap, setTap] = useState<TapState | null>(null);
   const [info, setInfo] = useState<TagResolution | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
+  const { me } = useAuth();
+  // 未登録タグをその場で登録するときに使うタッチ情報（URL から除去する前に保持）
+  const touchRef = useRef<{ sun?: { picc: string; cmac: string }; serial?: string }>({});
 
   const load = async () => {
     try {
@@ -37,6 +42,7 @@ export default function TagLanding() {
     const picc = sp.get("picc");
     const cmac = sp.get("cmac");
     const serial = (loc.state as { serial?: string } | null)?.serial;
+    touchRef.current = { sun: picc && cmac ? { picc, cmac } : undefined, serial };
     let p = recorded.get(key);
     if (!p) {
       p = (async (): Promise<TapState> => {
@@ -78,6 +84,25 @@ export default function TagLanding() {
         <div className="mt-3 text-sm">タッチを記録しています…</div>
       </div>
     );
+
+  if (tap.status === "error" && tap.code === "tag_unregistered") {
+    const canRegister = me && me.role !== "worker";
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl bg-sky-600 p-5 text-white">
+          <div className="text-lg font-bold">新しいタグです</div>
+          <div className="mt-1 text-sm">このタグはまだ設置場所が登録されていません。</div>
+        </div>
+        {canRegister ? (
+          <Card title="この場所にタグを登録">
+            <TagRegisterForm stockId={tagId} touch={touchRef.current} onDone={() => nav(`/t/${tagId}`, { replace: true, state: { registered: Date.now() } })} />
+          </Card>
+        ) : (
+          <Alert tone="amber">管理者またはマネージャーのアカウントでタッチすると、その場で登録できます。管理者に連絡してください。</Alert>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

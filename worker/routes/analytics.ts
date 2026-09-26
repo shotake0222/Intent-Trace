@@ -1,5 +1,6 @@
 // 分析（ヒートマップ・所要時間）と元請け向けレポート出力
-import { createRouter, fail } from "../lib/app";
+import { createRouter } from "../lib/app";
+import { assertFeature } from "../lib/platform";
 import { requireAuth, requireRole } from "../lib/auth";
 
 const r = createRouter();
@@ -15,10 +16,7 @@ function params(c: { req: { query: (k: string) => string | undefined } }) {
   return { from, to, siteId };
 }
 
-async function requirePro(env: Env, orgId: string) {
-  const o = await env.DB.prepare("SELECT plan FROM organizations WHERE id = ?").bind(orgId).first<{ plan: string }>();
-  if (o?.plan !== "pro") fail(403, "この分析機能は上位プラン（Pro）で利用できます", "plan_required");
-}
+const requirePro = (env: Env, orgId: string) => assertFeature(env, orgId, "analytics", "ヒートマップ・所要時間分析");
 
 r.get("/summary", async (c) => {
   const u = c.get("user");

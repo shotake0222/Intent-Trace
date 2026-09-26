@@ -25,12 +25,22 @@ export default function Home() {
   const proc = useApi<ProcCurrent | null>("/procedures/current");
   const queue = useQueue();
   const failed = queue.filter((q) => q.failed);
+  const ann = useApi<{ id: string; title: string; body: string; level: string }[]>("/account/announcements");
 
   const visited = patrol.data?.points.filter((p) => p.visited_at).length ?? 0;
   const nextStep = proc.data?.steps.find((s) => s.seq === proc.data?.nextSeq);
 
   return (
     <div className="space-y-4">
+      {ann.data
+        ?.filter((a) => a.level !== "info")
+        .slice(0, 2)
+        .map((a) => (
+          <Alert key={a.id} tone={a.level === "important" ? "red" : "amber"}>
+            <b>{a.title}</b>
+            <div className="whitespace-pre-wrap">{a.body}</div>
+          </Alert>
+        ))}
       <div className="relative overflow-hidden rounded-3xl bg-slate-900 p-6 text-white">
         <div className="relative z-10">
           <div className="text-sm text-amber-400">NFC タッチで記録</div>

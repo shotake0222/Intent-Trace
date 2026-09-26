@@ -34,3 +34,20 @@ export const PURPOSE_LABEL: Record<string, string> = {
   deadman: "生存確認"
 };
 export const TAG_KIND_LABEL: Record<string, string> = { checkpoint: "チェックポイント", equipment: "設備", procedure_step: "手順ステップ", deadman: "生存確認" };
+
+export const yen = (n?: number | null) => (n == null ? "—" : `¥${n.toLocaleString("ja-JP")}`);
+export const ORG_STATUS_LABEL: Record<string, string> = { trial: "トライアル", active: "契約中", suspended: "停止中", cancelled: "解約" };
+export const STOCK_STATUS_LABEL: Record<string, string> = { in_stock: "在庫", allocated: "出荷済（未登録）", registered: "稼働中", retired: "廃棄" };
+export const ITEM_TYPE_LABEL: Record<string, string> = { location_tag: "設置タグ", badge: "社員証" };
+export const INVOICE_STATUS_LABEL: Record<string, string> = { draft: "下書き", issued: "発行済", paid: "入金済", void: "無効" };
+export const TICKET_STATUS_LABEL: Record<string, string> = { open: "未回答", answered: "回答済", closed: "完了" };
+export const TICKET_CATEGORY_LABEL: Record<string, string> = { general: "一般", tags: "タグ・機器", billing: "請求", bug: "不具合", request: "要望" };
+export const FEATURE_LABEL: Record<string, string> = { reports: "レポート出力", devices: "IoTデバイス連携", analytics: "ヒートマップ分析", sun: "暗号タグ鍵の手動登録" };
+export const tagCode = (id: string) => (id.length === 10 ? `${id.slice(0, 5)}-${id.slice(5)}` : id);
+export function parsePlanFeatures(json: string): string[] {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return [];
+  }
+}

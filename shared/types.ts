@@ -14,6 +14,12 @@ export interface Me {
   plan: string;
   employeeCode: string;
   qualifications: { code: string; name: string; expiresAt: number | null }[];
+  features: string[];
+  planName: string;
+  orgStatus: "trial" | "active" | "suspended" | "cancelled";
+  trialEndsAt: number | null;
+  /** 運営による代理ログイン中なら運営アカウントID */
+  impersonatedBy: string | null;
 }
 
 export interface TagResolution {

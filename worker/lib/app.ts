@@ -8,6 +8,15 @@ export interface SessionUser {
   orgId: string;
   role: Role;
   name: string;
+  /** 運営による代理ログイン中なら運営アカウントID */
+  impersonatedBy?: string | null;
+}
+
+export interface OpsUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "owner" | "staff";
 }
 
 export interface DeviceCtx {
@@ -22,7 +31,7 @@ export interface DeviceCtx {
 
 export type AppEnv = {
   Bindings: Env;
-  Variables: { user: SessionUser; device: DeviceCtx };
+  Variables: { user: SessionUser; device: DeviceCtx; ops: OpsUser };
 };
 
 export type Ctx = Context<AppEnv>;
