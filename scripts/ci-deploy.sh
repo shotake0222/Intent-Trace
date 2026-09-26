@@ -13,10 +13,22 @@ trap 'rc=$?; msg=$(tail -n 25 "$LOG" | grep -v "::add-mask::" | sed "s/%/%25/g" 
 
 api() { curl -fsS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4$1"; }
 
+# アカウントID: Secret → wrangler.jsonc の account_id → API（/accounts, /memberships）の順で解決
 if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
-  CLOUDFLARE_ACCOUNT_ID=$(api /accounts | node -e 'const d=JSON.parse(require("fs").readFileSync(0));if(!d.result?.length){console.error("アカウントが見つかりません");process.exit(1)}console.log(d.result[0].id)')
-  export CLOUDFLARE_ACCOUNT_ID
+  CLOUDFLARE_ACCOUNT_ID=$(node -e 'const s=require("fs").readFileSync("wrangler.jsonc","utf8");const m=s.match(/"account_id":\s*"([0-9a-f]{32})"/);console.log(m?m[1]:"")')
 fi
+if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+  for ep in /accounts /memberships; do
+    CLOUDFLARE_ACCOUNT_ID=$(curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" "https://api.cloudflare.com/client/v4$ep" | node -e 'let d={};try{d=JSON.parse(require("fs").readFileSync(0))}catch{};const r=d.result?.[0];console.log(r?(r.account?.id??r.id):"");if(!r)console.error("'"$ep"'", JSON.stringify(d.errors??d).slice(0,300))')
+    [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && break
+  done
+fi
+if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+  echo "アカウントIDを特定できません。wrangler.jsonc に \"account_id\" を設定してください"
+  curl -sS -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" https://api.cloudflare.com/client/v4/user/tokens/verify | head -c 300; echo
+  false
+fi
+export CLOUDFLARE_ACCOUNT_ID
 echo "::add-mask::${CLOUDFLARE_ACCOUNT_ID}"
 
 echo "▶ D1"
