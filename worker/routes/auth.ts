@@ -3,6 +3,7 @@ import { createRouter, body, fail, newId, now, audit } from "../lib/app";
 import { issueSession, clearSession, requireAuth } from "../lib/auth";
 import { hashPassword, verifyPassword, timingSafeEqual, enc } from "../lib/crypto";
 import { getContract, contractBlockReason } from "../lib/platform";
+import { sendResetMail, consumeResetToken } from "../lib/mailers";
 
 async function assertContract(env: Env, orgId: string) {
   const c = await getContract(env, orgId);
@@ -70,6 +71,30 @@ r.post("/change-password", requireAuth, async (c) => {
   await c.env.DB.prepare("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(await hashPassword(b.next), u.id).run();
   await issueSession(c, u, { tokenVersion: row.token_version + 1 });
   await audit(c.env, u.orgId, u.id, "user.change_password", "user", u.id);
+  return c.json({ ok: true });
+});
+
+// パスワードを忘れた場合（管理者・マネージャー。作業員のPINは管理者が再設定）
+r.post("/forgot", async (c) => {
+  const b = await body(c, z.object({ email: z.string().email() }));
+  const email = b.email.toLowerCase();
+  const rk = `forgot:${email}`;
+  const n = Number((await c.env.CACHE.get(`rl:${rk}`)) ?? 0);
+  if (n < 5) {
+    await c.env.CACHE.put(`rl:${rk}`, String(n + 1), { expirationTtl: 3600 });
+    const u = await c.env.DB.prepare("SELECT id, name, email FROM users WHERE email = ? AND active = 1 AND role IN ('admin','manager')").bind(email).first<{ id: string; name: string; email: string }>();
+    if (u) await sendResetMail(c.env, c.req.url, "user", u.id, u.email, u.name);
+  }
+  // アカウントの有無は応答から分からないようにする
+  return c.json({ ok: true });
+});
+
+r.post("/reset", async (c) => {
+  const b = await body(c, z.object({ token: z.string().min(20), password: z.string().min(8).max(128) }));
+  const userId = await consumeResetToken(c.env, "user", b.token);
+  const u = await c.env.DB.prepare("SELECT org_id FROM users WHERE id = ?").bind(userId).first<{ org_id: string }>();
+  await c.env.DB.prepare("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(await hashPassword(b.password), userId).run();
+  if (u) await audit(c.env, u.org_id, userId, "user.password_reset_self", "user", userId);
   return c.json({ ok: true });
 });
 

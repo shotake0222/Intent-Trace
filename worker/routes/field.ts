@@ -55,14 +55,22 @@ r.post("/tap", async (c) => {
       tagId: z.string().min(1),
       clientEventId: z.string().min(8).max(64),
       occurredAt: z.number().int(),
-      source: z.enum(["pwa_url", "pwa_webnfc"]),
+      source: z.enum(["pwa_url", "pwa_webnfc", "pwa_qr"]),
       sun: z.object({ picc: z.string().regex(/^[0-9A-Fa-f]{32}$/), cmac: z.string().regex(/^[0-9A-Fa-f]{16}$/) }).optional(),
       serial: z.string().max(64).optional(),
       offline: z.boolean().optional()
     })
   );
   const tag = await tagForUser(c.env, b.tagId, u.orgId);
-  const a = await evaluateAssurance(c.env, tag, { sun: b.sun, serial: b.serial, offline: b.offline });
+  let a;
+  if (b.source === "pwa_qr") {
+    // QRはカメラで読める＝撮影・コピーで再現できるため証明レベルは常に「低」。組織設定で無効化できる
+    const org = await c.env.DB.prepare("SELECT allow_qr_checkin FROM organizations WHERE id = ?").bind(u.orgId).first<{ allow_qr_checkin: number }>();
+    if (!org?.allow_qr_checkin) fail(403, "この会社ではQRコードでの記録は許可されていません。NFCタグにスマホをタッチしてください", "qr_disabled");
+    a = { assurance: "low" as const, sunCounter: null, warnings: ["QRコード読取で記録しました（物理タッチの証明なし）"] };
+  } else {
+    a = await evaluateAssurance(c.env, tag, { sun: b.sun, serial: b.serial, offline: b.offline });
+  }
   const res = await processTap(c.env, {
     tag,
     user: { id: u.id, name: u.name, orgId: u.orgId },

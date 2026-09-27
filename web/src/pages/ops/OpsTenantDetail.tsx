@@ -225,8 +225,8 @@ export default function OpsTenantDetail() {
                     onClick={async () => {
                       if (!confirm(`${a.name} さんのパスワードを再発行しますか？`)) return;
                       try {
-                        const r = await post<{ temporaryPassword: string }>(`/ops/tenants/${id}/users/${a.id}/reset-password`);
-                        setMsg({ tone: "amber", text: `${a.name} さんの仮パスワード: ${r.temporaryPassword}（この表示は再度出ません）` });
+                        const r = await post<{ temporaryPassword: string; mailStatus: string | null }>(`/ops/tenants/${id}/users/${a.id}/reset-password`);
+                        setMsg({ tone: "amber", text: `${a.name} さんの仮パスワード: ${r.temporaryPassword}（この表示は再度出ません）${r.mailStatus === "sent" ? " ／ ご本人にメールで通知しました" : ""}` });
                       } catch (e) {
                         setMsg({ tone: "red", text: e instanceof ApiError ? e.message : String(e) });
                       }

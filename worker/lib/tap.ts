@@ -6,7 +6,7 @@ import { activePatrolFor, activeProcedureFor, activeDeadmanFor, deadmanStub, loc
 export interface TapInput {
   tag: TagRow;
   user: { id: string; name: string; orgId: string };
-  source: "pwa_url" | "pwa_webnfc" | "reader";
+  source: "pwa_url" | "pwa_webnfc" | "pwa_qr" | "reader";
   assurance: Assurance;
   sunCounter: number | null;
   clientEventId: string | null;

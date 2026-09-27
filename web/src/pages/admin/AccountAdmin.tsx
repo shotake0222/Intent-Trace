@@ -1,8 +1,10 @@
 // 契約・請求・お知らせ・サポート・パスワード（テナント管理者）
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
+import { Qr } from "../../components/Qr";
 import { useApi } from "../../lib/hooks";
 import { useAuth } from "../../lib/auth";
-import { ApiError, patch, post } from "../../lib/api";
+import { ApiError, del, patch, post, put } from "../../lib/api";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Select, Stat, Textarea, cx } from "../../components/ui";
 import { Modal } from "../../components/Modal";
 import { FEATURE_LABEL, INVOICE_STATUS_LABEL, ORG_STATUS_LABEL, TICKET_CATEGORY_LABEL, TICKET_STATUS_LABEL, fmtAgo, fmtDate, fmtDateTime, parsePlanFeatures, yen } from "../../lib/format";
@@ -16,10 +18,11 @@ interface ContractRes {
   support: { email: string; company: string };
 }
 
-type Tab = "contract" | "invoices" | "support" | "security";
+type Tab = "contract" | "invoices" | "notify" | "support" | "security";
 
 export default function AccountAdmin() {
-  const [tab, setTab] = useState<Tab>("contract");
+  const [sp] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => (["contract", "invoices", "notify", "support", "security"].includes(sp.get("tab") ?? "") ? (sp.get("tab") as Tab) : "contract"));
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">契約・サポート</h1>
@@ -28,6 +31,7 @@ export default function AccountAdmin() {
           [
             ["contract", "契約・プラン"],
             ["invoices", "請求書"],
+            ["notify", "通知（メール・LINE）"],
             ["support", "お問い合わせ"],
             ["security", "パスワード"]
           ] as [Tab, string][]
@@ -39,6 +43,7 @@ export default function AccountAdmin() {
       </div>
       {tab === "contract" && <ContractTab onConsult={() => setTab("support")} />}
       {tab === "invoices" && <InvoicesTab />}
+      {tab === "notify" && <NotifyTab />}
       {tab === "support" && <SupportTab />}
       {tab === "security" && <SecurityTab />}
     </div>
@@ -408,5 +413,232 @@ function SecurityTab() {
         </Button>
       </div>
     </Card>
+  );
+}
+
+interface NotifyRes {
+  prefs: { alertEmail: string; alertLine: string; extraEmails: string[]; invoiceEmail: boolean };
+  me: { email: string | null; notifyEmail: boolean };
+  emailRecipients: { name: string; email: string; notify_email: number }[];
+  allowQrCheckin: boolean;
+  channels: { email: boolean; line: boolean; lineBasicId: string };
+  lineTargets: { id: string; kind: string; display_name: string | null; min_severity: string; active: number; user_name: string | null; created_at: number }[];
+  log: { id: string; channel: string; to_label: string | null; to_address: string; event_type: string; subject: string; status: string; last_error: string | null; created_at: number }[];
+}
+const SEV_OPTS: [string, string][] = [
+  ["danger", "緊急のみ（生存確認の応答なし・危険接近・重大ヒヤリハット）"],
+  ["warning", "注意以上（無資格操作・手順違反・点検異常なども）"],
+  ["info", "すべて"],
+  ["off", "送らない"]
+];
+
+function NotifyTab() {
+  const { me } = useAuth();
+  const { data, reload } = useApi<NotifyRes>("/account/notifications");
+  const [p, setP] = useState<NotifyRes["prefs"] | null>(null);
+  const [extra, setExtra] = useState("");
+  const [qr, setQr] = useState(true);
+  const [msg, setMsg] = useState<{ tone: "green" | "red" | "amber"; text: string } | null>(null);
+  const [link, setLink] = useState<{ code: string; expiresAt: number; addFriendUrl: string | null; personal: boolean } | null>(null);
+  useEffect(() => {
+    if (data) {
+      setP(data.prefs);
+      setExtra(data.prefs.extraEmails.join("\n"));
+      setQr(data.allowQrCheckin);
+    }
+  }, [data]);
+  if (!data || !p) return <Empty>読み込み中…</Empty>;
+  const isAdmin = me?.role === "admin";
+  const act = async (fn: () => Promise<unknown>, ok?: string) => {
+    try {
+      await fn();
+      if (ok) setMsg({ tone: "green", text: ok });
+      await reload();
+    } catch (e) {
+      setMsg({ tone: "red", text: e instanceof ApiError ? e.message : String(e) });
+    }
+  };
+  return (
+    <div className="space-y-6">
+      {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
+      {!data.channels.email && <Alert tone="amber">メール送信は運営側で準備中です。設定は保存でき、準備が整い次第送信されます。</Alert>}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card title="アラートの通知先">
+          <div className="space-y-4">
+            <Field label="メール（管理者・マネージャー）">
+              <Select value={p.alertEmail} onChange={(e) => setP({ ...p, alertEmail: e.target.value })} disabled={!isAdmin}>
+                {SEV_OPTS.map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="LINE（連携したグループ・個人）">
+              <Select value={p.alertLine} onChange={(e) => setP({ ...p, alertLine: e.target.value })} disabled={!isAdmin}>
+                {SEV_OPTS.map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="追加のメール宛先（1行に1件）" hint="現場事務所・安全管理者など、アカウントを持たない宛先">
+              <Textarea rows={3} value={extra} onChange={(e) => setExtra(e.target.value)} disabled={!isAdmin} className="font-mono text-sm" />
+            </Field>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={p.invoiceEmail} onChange={(e) => setP({ ...p, invoiceEmail: e.target.checked })} disabled={!isAdmin} />
+              請求書の発行をメールで受け取る（請求書送付先・ご担当者宛）
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={qr} onChange={(e) => setQr(e.target.checked)} disabled={!isAdmin} />
+              <span>
+                ラベルのQRコード読み取りでの記録を許可する
+                <br />
+                <span className="text-xs text-slate-500">NFC非対応の端末向け。QRは撮影で再現できるため「証明レベル：低」として記録されます</span>
+              </span>
+            </label>
+            {isAdmin && (
+              <Button
+                onClick={() =>
+                  act(
+                    () =>
+                      put("/account/notifications", {
+                        ...p,
+                        extraEmails: extra
+                          .split(/[\s,]+/)
+                          .map((x) => x.trim())
+                          .filter(Boolean),
+                        allowQrCheckin: qr
+                      }),
+                    "通知設定を保存しました"
+                  )
+                }
+              >
+                保存
+              </Button>
+            )}
+          </div>
+        </Card>
+        <div className="space-y-6">
+          <Card title="メールの受信者">
+            <ul className="space-y-1 text-sm">
+              {data.emailRecipients.map((r) => (
+                <li key={r.email} className="flex justify-between gap-2">
+                  <span>
+                    {r.name} <span className="text-xs text-slate-500">{r.email}</span>
+                  </span>
+                  <Badge tone={r.notify_email ? "green" : "slate"}>{r.notify_email ? "受信" : "停止"}</Badge>
+                </li>
+              ))}
+            </ul>
+            {data.me.email && (
+              <label className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3 text-sm">
+                <input type="checkbox" checked={data.me.notifyEmail} onChange={(e) => act(() => put("/account/notifications/me", { notifyEmail: e.target.checked }), "受信設定を変更しました")} />
+                自分（{data.me.email}）もアラートメールを受け取る
+              </label>
+            )}
+          </Card>
+          <Card
+            title="LINE 連携"
+            action={
+              data.channels.line && (
+                <div className="flex gap-1">
+                  <Button size="sm" onClick={() => act(async () => setLink({ ...(await post<{ code: string; expiresAt: number; addFriendUrl: string | null }>("/account/line/link-code", { personal: false })), personal: false }))}>
+                    グループを連携
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => act(async () => setLink({ ...(await post<{ code: string; expiresAt: number; addFriendUrl: string | null }>("/account/line/link-code", { personal: true })), personal: true }))}>
+                    自分のLINE
+                  </Button>
+                </div>
+              )
+            }
+          >
+            {!data.channels.line ? (
+              <Empty>LINE通知は運営側で準備中です</Empty>
+            ) : !data.lineTargets.length ? (
+              <Empty>まだ連携されていません。現場のLINEグループを連携すると、アラートが全員に届きます</Empty>
+            ) : (
+              <ul className="divide-y divide-slate-100 text-sm">
+                {data.lineTargets.map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <div>
+                      <div className="font-semibold">
+                        {t.kind === "group" ? "👥 " : "👤 "}
+                        {t.display_name}
+                        {!t.active && <Badge tone="red">ブロック/退出</Badge>}
+                      </div>
+                      {t.user_name && <div className="text-xs text-slate-500">{t.user_name} さん</div>}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Select value={t.min_severity} onChange={(e) => act(() => patch(`/account/line/targets/${t.id}`, { minSeverity: e.target.value }))} className="w-28 py-1 text-xs">
+                        <option value="danger">緊急のみ</option>
+                        <option value="warning">注意以上</option>
+                        <option value="info">すべて</option>
+                      </Select>
+                      <Button size="sm" variant="ghost" onClick={() => confirm("連携を解除しますか？") && act(() => del(`/account/line/targets/${t.id}`), "解除しました")}>
+                        解除
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Button variant="outline" className="w-full" onClick={() => act(async () => {
+            const r = await post<{ total: number; sent: number; skipped: number; failed: number }>("/account/notifications/test");
+            setMsg({ tone: r.sent ? "green" : "amber", text: `テスト通知: ${r.total}件（送信 ${r.sent}・未送信 ${r.skipped}・失敗 ${r.failed}）` });
+          })}>
+            テスト通知を送る
+          </Button>
+        </div>
+      </div>
+      <Card title="最近の通知">
+        {!data.log.length ? (
+          <Empty>まだ通知はありません</Empty>
+        ) : (
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-slate-100">
+              {data.log.map((l) => (
+                <tr key={l.id}>
+                  <td className="py-2 text-xs whitespace-nowrap text-slate-500">{fmtDateTime(l.created_at)}</td>
+                  <td className="text-xs">{l.channel === "line" ? "LINE" : "メール"}</td>
+                  <td className="max-w-[200px] truncate text-xs">{l.to_label || l.to_address}</td>
+                  <td className="max-w-md truncate">{l.subject}</td>
+                  <td>
+                    <Badge tone={l.status === "sent" ? "green" : l.status === "failed" ? "red" : "slate"}>{{ sent: "送信済", failed: "失敗", skipped: "未送信", pending: "送信待ち" }[l.status] ?? l.status}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+      {link && (
+        <Modal open onClose={() => (setLink(null), void reload())} title={link.personal ? "自分のLINEと連携" : "LINEグループと連携"}>
+          <div className="space-y-4 text-sm">
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>
+                公式アカウントを友だち追加します
+                {link.addFriendUrl && (
+                  <div className="mt-2 flex items-center gap-3">
+                    <Qr text={link.addFriendUrl} size={120} />
+                    <a href={link.addFriendUrl} target="_blank" rel="noreferrer" className="text-sky-700 underline">
+                      友だち追加リンク
+                    </a>
+                  </div>
+                )}
+              </li>
+              {!link.personal && <li>通知を届けたいLINEグループに、その公式アカウントを招待します</li>}
+              <li>
+                {link.personal ? "公式アカウントとのトーク" : "そのグループ"}で次の6桁を送信します（15分以内）
+                <div className="mt-2 rounded-xl bg-slate-900 py-3 text-center font-mono text-3xl tracking-[.4em] text-white">{link.code}</div>
+              </li>
+            </ol>
+            <p className="text-xs text-slate-500">「連携しました」と返信が来たら完了です。この画面を閉じると一覧が更新されます。</p>
+          </div>
+        </Modal>
+      )}
+    </div>
   );
 }

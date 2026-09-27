@@ -7,6 +7,7 @@ import { Alert, Badge, Button, Card, Empty, Field, Input, Select } from "../../c
 import { Modal } from "../../components/Modal";
 import { TAG_KIND_LABEL, fmtAgo, tagCode } from "../../lib/format";
 import { TagRegisterForm } from "../../components/TagRegisterForm";
+import { Qr } from "../../components/Qr";
 import { get, ApiError as ApiErr } from "../../lib/api";
 import { parseTagUrl, scanOnce } from "../../lib/nfc";
 
@@ -150,6 +151,9 @@ export default function TagsAdmin() {
         <h1 className="text-2xl font-bold">NFCタグ（仮想ビーコン）</h1>
         <div className="flex gap-2">
           <Button onClick={() => setRegistering("pick")}>＋ 受領タグを登録</Button>
+          <a href={`/api/admin/tags/labels?siteId=${siteId}`} target="_blank" rel="noreferrer">
+            <Button variant="outline">ラベル印刷（QR付き）</Button>
+          </a>
           <Button variant="outline" onClick={() => setCreating(true)}>
             持ち込みタグ
           </Button>
@@ -368,6 +372,16 @@ function WriteTag({ tag, onClose }: { tag: TagRow; onClose: () => void }) {
   return (
     <Modal open onClose={onClose} title={`タグへの書き込み: ${tag.label}`}>
       <div className="space-y-4">
+        <div className="flex items-center gap-4 rounded-xl bg-slate-50 p-3">
+          <Qr text={`${location.origin}/t/${tag.id}?src=qr`} size={112} />
+          <div className="space-y-2 text-sm">
+            <div className="font-semibold">QRコード</div>
+            <p className="text-xs text-slate-500">NFC非対応の端末はカメラで読み取って記録できます（証明レベル：低）。ラベルに印刷してタグと一緒に貼ってください。</p>
+            <a href={`/api/admin/tags/labels?ids=${tag.id}&size=l`} target="_blank" rel="noreferrer" className="text-sky-700 underline">
+              このタグのラベルを印刷
+            </a>
+          </div>
+        </div>
         <div>
           <div className="mb-1 text-sm font-semibold">書き込むURL</div>
           <div className="rounded-xl bg-slate-100 p-3 font-mono text-xs break-all">{url}</div>

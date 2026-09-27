@@ -22,7 +22,8 @@ import DevicesAdmin from "./pages/admin/DevicesAdmin";
 import Records from "./pages/admin/Records";
 import SitesAdmin from "./pages/admin/SitesAdmin";
 import AccountAdmin from "./pages/admin/AccountAdmin";
-import OpsLayout, { OpsLogin } from "./pages/ops/OpsLayout";
+import OpsLayout, { OpsLogin, ResetPassword } from "./pages/ops/OpsLayout";
+import { OpsNotifications } from "./pages/ops/OpsSecurity";
 import OpsDashboard from "./pages/ops/OpsDashboard";
 import OpsTenants from "./pages/ops/OpsTenants";
 import OpsTenantDetail from "./pages/ops/OpsTenantDetail";
@@ -84,6 +85,8 @@ export default function App() {
         <Route path="account" element={<AccountAdmin />} />
       </Route>
       <Route path="ops/login" element={<OpsLogin />} />
+      <Route path="ops/reset" element={<ResetPassword kind="ops" />} />
+      <Route path="reset-password" element={<ResetPassword kind="user" />} />
       <Route path="ops" element={<OpsLayout />}>
         <Route index element={<OpsDashboard />} />
         <Route path="tenants" element={<OpsTenants />} />
@@ -95,6 +98,7 @@ export default function App() {
         <Route path="support" element={<OpsSupport />} />
         <Route path="settings" element={<OpsSettings />} />
         <Route path="audit" element={<OpsAudit />} />
+        <Route path="notifications" element={<OpsNotifications />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

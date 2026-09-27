@@ -50,7 +50,7 @@ export default function TagLanding() {
         try {
           const r = await recordTap({
             tagId,
-            source: serial ? "pwa_webnfc" : "pwa_url",
+            source: serial ? "pwa_webnfc" : sp.get("src") === "qr" ? "pwa_qr" : "pwa_url",
             sun: picc && cmac ? { picc, cmac } : undefined,
             serial
           });
@@ -70,7 +70,7 @@ export default function TagLanding() {
       void load();
     });
     // 使い終えた SUN パラメータは URL から除去（再読込でのリプレイ扱いを避ける）
-    if (picc) window.history.replaceState(window.history.state, "", `/t/${tagId}`);
+    if (picc || sp.get("src")) window.history.replaceState(window.history.state, "", `/t/${tagId}`);
     return () => {
       alive = false;
     };

@@ -77,7 +77,7 @@ export interface TapRequest {
   tagId: string;
   clientEventId: string;
   occurredAt: number;
-  source: "pwa_url" | "pwa_webnfc";
+  source: "pwa_url" | "pwa_webnfc" | "pwa_qr";
   /** NTAG424 SUN パラメータ（URL の picc / cmac） */
   sun?: { picc: string; cmac: string };
   /** Android Web NFC で読んだ物理UID */

@@ -7,6 +7,8 @@ import { invalidateTag, invalidateTagsForEquipment } from "../lib/tags";
 import { lockStub, deadmanStub } from "../lib/domain";
 import { assertLimit, assertFeature } from "../lib/platform";
 import { verifySun, SunError } from "../lib/sun";
+import { sendUserInviteMail } from "../lib/mailers";
+import { qrSvg, tagQrUrl } from "../lib/qr";
 
 const r = createRouter();
 r.use("*", requireAuth, requireRole("admin", "manager"));
@@ -99,7 +101,23 @@ r.post("/users", adminOnly, async (c) => {
     fail(409, "社員番号またはメールアドレスが重複しています");
   }
   await audit(c.env, u.orgId, u.id, "user.create", "user", id, { role: b.role });
-  return c.json({ id });
+  let mailStatus: string | null = null;
+  if (b.email) {
+    const org = await c.env.DB.prepare("SELECT name, code FROM organizations WHERE id = ?").bind(u.orgId).first<{ name: string; code: string }>();
+    mailStatus = await sendUserInviteMail(c.env, c.req.url, {
+      orgId: u.orgId,
+      userId: id,
+      to: b.email.toLowerCase(),
+      name: b.name,
+      role: b.role,
+      orgName: org?.name ?? "",
+      orgCode: org?.code ?? "",
+      employeeCode: b.employeeCode,
+      secret: b.secret,
+      invitedBy: u.name
+    });
+  }
+  return c.json({ id, mailStatus });
 });
 
 r.patch("/users/:id", adminOnly, async (c) => {
@@ -327,6 +345,41 @@ r.patch("/tags/:id", async (c) => {
   await invalidateTag(c.env, c.req.param("id"));
   await audit(c.env, u.orgId, u.id, "tag.update", "tag", c.req.param("id"), { fields: Object.keys(b).filter((k) => !k.startsWith("sun")) });
   return c.json({ ok: true });
+});
+
+/** 登録済みタグのラベル（QRコード付き）印刷 */
+r.get("/tags/labels", async (c) => {
+  const u = c.get("user");
+  const ids = (c.req.query("ids") ?? "").split(",").filter(Boolean);
+  const siteId = c.req.query("siteId") ?? null;
+  const size = c.req.query("size") === "l" ? "l" : "s";
+  const { results } = await c.env.DB.prepare(
+    `SELECT t.id, t.label, t.kind, s.name AS site_name, z.name AS zone_name, o.name AS org_name, o.allow_qr_checkin
+       FROM tags t JOIN sites s ON s.id = t.site_id LEFT JOIN zones z ON z.id = t.zone_id JOIN organizations o ON o.id = t.org_id
+      WHERE t.org_id = ? AND t.active = 1 AND (? IS NULL OR t.site_id = ?) ORDER BY s.name, t.label`
+  )
+    .bind(u.orgId, siteId, siteId)
+    .all<{ id: string; label: string; kind: string; site_name: string; zone_name: string | null; org_name: string; allow_qr_checkin: number }>();
+  const rows = ids.length ? results.filter((r0) => ids.includes(r0.id)) : results;
+  const origin = new URL(c.req.url).origin;
+  const esc = (x: string) => x.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
+  const KIND: Record<string, string> = { checkpoint: "チェックポイント", equipment: "設備", procedure_step: "作業手順", deadman: "生存確認" };
+  const cells = rows
+    .map(
+      (t) => `<div class="l"><div class="q">${qrSvg(tagQrUrl(origin, t.id), { margin: 1 })}</div><div class="t">
+<div class="k">${esc(KIND[t.kind] ?? "")}</div><div class="n">${esc(t.label)}</div><div class="s">${esc(t.site_name)}${t.zone_name ? ` / ${esc(t.zone_name)}` : ""}</div>
+<div class="c">${t.id.slice(0, 5)}-${t.id.slice(5)}</div><div class="h">NFCにタッチ${rows[0]?.allow_qr_checkin ? "／QRを読取" : ""}</div></div></div>`
+    )
+    .join("");
+  return c.html(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>タグラベル</title><style>
+body{margin:8mm;font-family:"Hiragino Sans","Noto Sans JP",sans-serif}
+.g{display:grid;grid-template-columns:repeat(${size === "l" ? 2 : 3},1fr);gap:3mm}
+.l{border:1px dashed #999;border-radius:3mm;padding:2.5mm;display:flex;gap:3mm;align-items:center;break-inside:avoid;height:${size === "l" ? 50 : 32}mm;box-sizing:border-box;overflow:hidden}
+.q{flex:none;width:${size === "l" ? 42 : 26}mm;height:${size === "l" ? 42 : 26}mm}.q svg{width:100%;height:100%}
+.t{min-width:0}.k{font-size:7pt;color:#b45309;font-weight:bold}.n{font-size:${size === "l" ? 15 : 10}pt;font-weight:bold;line-height:1.25;margin:.5mm 0}
+.s{font-size:7pt;color:#555}.c{font-family:ui-monospace,monospace;font-size:8pt;margin-top:1mm}.h{font-size:6.5pt;color:#777;margin-top:.5mm}
+.bar{margin-bottom:4mm;font-size:12px}@media print{.bar{display:none}}
+</style></head><body><div class="bar"><button onclick="print()">印刷</button> ${rows.length}枚 ／ サイズ: <a href="?${new URLSearchParams({ ...(siteId ? { siteId } : {}), ...(ids.length ? { ids: ids.join(",") } : {}), size: "s" })}">小</a> <a href="?${new URLSearchParams({ ...(siteId ? { siteId } : {}), ...(ids.length ? { ids: ids.join(",") } : {}), size: "l" })}">大</a></div><div class="g">${cells}</div></body></html>`);
 });
 
 // ===== 受領タグ（運営から出荷されたハードウェア）の登録 =====

@@ -30,7 +30,7 @@ export default function OpsBilling() {
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     try {
       await fn();
-      setMsg({ tone: "green", text: ok });
+      if (ok) setMsg({ tone: "green", text: ok });
       await reload();
     } catch (e) {
       setMsg({ tone: "red", text: e instanceof ApiError ? e.message : String(e) });
@@ -68,7 +68,7 @@ export default function OpsBilling() {
           </Button>
         </div>
       </div>
-      <Alert tone="blue">契約中（active）のテナントについて、その時点の稼働タグ数・ユーザー数から下書きを作成します。内容を確認して「発行」するとテナントの管理画面に表示されます。</Alert>
+      <Alert tone="blue">契約中（active）のテナントについて、その時点の稼働タグ数・ユーザー数から下書きを作成します。内容を確認して「発行」するとテナントの管理画面に表示され、請求書送付先へメールで通知されます。</Alert>
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="下書き" value={yen(sum("draft"))} />
@@ -124,9 +124,17 @@ export default function OpsBilling() {
                         </>
                       )}
                       {i.status === "issued" && (
-                        <Button size="sm" variant="ghost" onClick={() => act(() => patch(`/ops/invoices/${i.id}`, { status: "paid" }), "入金済みにしました")}>
-                          入金確認
-                        </Button>
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => act(async () => {
+                            const r = await post<{ recipients: number }>(`/ops/invoices/${i.id}/send`);
+                            setMsg({ tone: "green", text: `請求書メールを ${r.recipients} 件の宛先に送信しました（結果は通知履歴）` });
+                          }, "")}>
+                            メール再送
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => act(() => patch(`/ops/invoices/${i.id}`, { status: "paid" }), "入金済みにしました")}>
+                            入金確認
+                          </Button>
+                        </>
                       )}
                       {i.status !== "void" && i.status !== "paid" && (
                         <Button

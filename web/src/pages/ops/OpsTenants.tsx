@@ -118,13 +118,13 @@ function CreateTenant({ onClose, onCreated }: { onClose: () => void; onCreated: 
     adminEmail: ""
   });
   const [err, setErr] = useState<string | null>(null);
-  const [result, setResult] = useState<{ id: string; orgCode: string; adminEmail: string; initialPassword: string | null } | null>(null);
+  const [result, setResult] = useState<{ id: string; orgCode: string; adminEmail: string; initialPassword: string | null; mailStatus?: string } | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
   async function save() {
     setErr(null);
     try {
-      const r = await post<{ id: string; orgCode: string; adminEmail: string; initialPassword: string | null }>("/ops/tenants", {
+      const r = await post<{ id: string; orgCode: string; adminEmail: string; initialPassword: string | null; mailStatus: string }>("/ops/tenants", {
         name: f.name,
         code: f.code,
         plan: f.plan,
@@ -150,7 +150,13 @@ function CreateTenant({ onClose, onCreated }: { onClose: () => void; onCreated: 
     return (
       <Modal open onClose={onClose} title="テナントを作成しました">
         <div className="space-y-3 text-sm">
-          <Alert tone="amber">初期パスワードは<b>この画面でのみ</b>表示されます。管理者様へ安全な方法でお伝えください（初回ログイン後に変更を推奨）。</Alert>
+          {result.mailStatus === "sent" ? (
+            <Alert tone="green">管理者様へご利用開始のご案内メール（初期パスワード記載）を送信しました。</Alert>
+          ) : (
+            <Alert tone="amber">
+              案内メールは送信されていません（{result.mailStatus === "skipped" ? "メール送信サービスが未設定" : "送信失敗・通知履歴を確認"}）。初期パスワードは<b>この画面でのみ</b>表示されます。安全な方法でお伝えください。
+            </Alert>
+          )}
           <dl className="grid grid-cols-3 gap-y-2 rounded-xl bg-slate-50 p-4">
             <dt className="text-slate-500">ログインURL</dt>
             <dd className="col-span-2 font-mono break-all">{location.origin}/login?next=/admin</dd>

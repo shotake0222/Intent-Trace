@@ -106,8 +106,17 @@ export const requireOps = createMiddleware<AppEnv>(async (c, next) => {
     fail(401, "運営ログインが必要です", "ops_unauthenticated");
   }
   if (p.aud !== "ops") fail(401, "運営ログインが必要です", "ops_unauthenticated");
-  const row = await c.env.DB.prepare("SELECT active, token_version, role FROM platform_admins WHERE id = ?").bind(p.sub).first<{ active: number; token_version: number; role: "owner" | "staff" }>();
+  const row = await c.env.DB.prepare(
+    "SELECT a.active, a.token_version, a.role, a.totp_enabled, (SELECT value FROM platform_settings WHERE key = 'require_ops_2fa') AS require2fa FROM platform_admins a WHERE a.id = ?"
+  )
+    .bind(p.sub)
+    .first<{ active: number; token_version: number; role: "owner" | "staff"; totp_enabled: number; require2fa: string | null }>();
   if (!row || !row.active || row.token_version !== p.tv) fail(401, "セッションが無効です", "ops_unauthenticated");
+  // 二段階認証が必須なのに未設定 → 設定画面以外は操作させない
+  if (row.require2fa === "1" && !row.totp_enabled) {
+    const path = new URL(c.req.url).pathname;
+    if (!/^\/api\/ops\/(me|2fa\/|logout|change-password)/.test(path)) fail(403, "二段階認証の設定が必要です", "mfa_setup_required");
+  }
   c.set("ops", { id: p.sub, name: p.name, email: p.email, role: row.role });
   await next();
 });

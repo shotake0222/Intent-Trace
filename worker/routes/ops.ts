@@ -2,7 +2,12 @@
 import { z } from "zod";
 import { createRouter, body, fail, newId, now, audit, parseJson } from "../lib/app";
 import { requireOps, requireOpsOwner, issueOpsSession, clearOpsSession, issueSession } from "../lib/auth";
-import { hashPassword, verifyPassword, timingSafeEqual, enc, shortId, sealSecret, openSecret, bytesToHex, randomToken } from "../lib/crypto";
+import { sign, verify } from "hono/jwt";
+import { hashPassword, verifyPassword, timingSafeEqual, enc, shortId, sealSecret, openSecret, bytesToHex, randomToken, sha256Hex } from "../lib/crypto";
+import { newTotpSecret, verifyTotp, otpauthUri } from "../lib/totp";
+import { qrSvg, tagQrUrl } from "../lib/qr";
+import { notify, retryOutbox, getNotifyConfig, emailTemplate, rememberBaseUrl, putSecretSetting, SECRET_SETTINGS } from "../lib/notify";
+import { sendResetMail, consumeResetToken, sendWelcomeMail, sendInvoiceMail } from "../lib/mailers";
 import { getContract, usage, computeInvoice, platformAudit, getSettings, monthKey } from "../lib/platform";
 import { renderInvoice } from "../lib/invoice";
 
@@ -43,9 +48,76 @@ r.post("/login", async (c) => {
     await c.env.CACHE.put(key, String(tries + 1), { expirationTtl: 900 });
     fail(401, "メールアドレスまたはパスワードが違います");
   }
+  await c.env.CACHE.delete(key);
+  await rememberBaseUrl(c.env, c.req.url);
+  const mfa = await c.env.DB.prepare("SELECT totp_enabled FROM platform_admins WHERE id = ?").bind(a.id).first<{ totp_enabled: number }>();
+  if (mfa?.totp_enabled) {
+    // パスワードは正しい → 5分間有効の中間トークンで二段階目へ
+    const mfaToken = await sign({ sub: a.id, aud: "ops-mfa", tv: a.token_version, exp: Math.floor(Date.now() / 1000) + 300 }, c.env.JWT_SECRET, "HS256");
+    return c.json({ mfaRequired: true, mfaToken });
+  }
   await c.env.DB.prepare("UPDATE platform_admins SET last_login_at = ? WHERE id = ?").bind(now(), a.id).run();
-  await platformAudit(c.env, a.id, "ops.login", null, null);
+  await platformAudit(c.env, a.id, "ops.login", null, null, { mfa: false });
   await issueOpsSession(c, a, a.token_version);
+  return c.json({ ok: true });
+});
+
+/** 二段階目: 認証アプリの6桁コード または リカバリーコード */
+r.post("/login/mfa", async (c) => {
+  const b = await body(c, z.object({ mfaToken: z.string(), code: z.string().optional(), recoveryCode: z.string().optional() }));
+  let p: { sub: string; aud: string; tv: number };
+  try {
+    p = (await verify(b.mfaToken, c.env.JWT_SECRET, "HS256")) as typeof p;
+  } catch {
+    fail(401, "有効期限が切れました。もう一度ログインしてください", "mfa_expired");
+  }
+  if (p.aud !== "ops-mfa") fail(401, "不正なトークンです");
+  const key = `rl:opsmfa:${p.sub}`;
+  const tries = Number((await c.env.CACHE.get(key)) ?? 0);
+  if (tries >= 6) fail(429, "試行回数が多すぎます。15分ほど待ってから再度お試しください");
+  const a = await c.env.DB.prepare("SELECT id, name, email, role, active, token_version, totp_secret, totp_last_step, recovery_codes_json FROM platform_admins WHERE id = ?")
+    .bind(p.sub)
+    .first<{ id: string; name: string; email: string; role: "owner" | "staff"; active: number; token_version: number; totp_secret: string | null; totp_last_step: number; recovery_codes_json: string | null }>();
+  if (!a || !a.active || a.token_version !== p.tv || !a.totp_secret) fail(401, "もう一度ログインしてください");
+  let method = "totp";
+  if (b.code) {
+    const step = await verifyTotp(await openSecret(a.totp_secret, c.env.TAG_KEY_SECRET), b.code, a.totp_last_step);
+    if (step === null) {
+      await c.env.CACHE.put(key, String(tries + 1), { expirationTtl: 900 });
+      fail(401, "確認コードが違います（端末の時刻がずれていないか確認してください）", "mfa_invalid");
+    }
+    await c.env.DB.prepare("UPDATE platform_admins SET totp_last_step = ? WHERE id = ?").bind(step, a.id).run();
+  } else if (b.recoveryCode) {
+    const h = await sha256Hex(b.recoveryCode.replace(/[\s-]/g, "").toUpperCase());
+    const codes = parseJson<string[]>(a.recovery_codes_json, []);
+    if (!codes.includes(h)) {
+      await c.env.CACHE.put(key, String(tries + 1), { expirationTtl: 900 });
+      fail(401, "リカバリーコードが違います", "mfa_invalid");
+    }
+    await c.env.DB.prepare("UPDATE platform_admins SET recovery_codes_json = ? WHERE id = ?").bind(JSON.stringify(codes.filter((x) => x !== h)), a.id).run();
+    method = "recovery";
+  } else fail(422, "確認コードを入力してください");
+  await c.env.CACHE.delete(key);
+  await c.env.DB.prepare("UPDATE platform_admins SET last_login_at = ? WHERE id = ?").bind(now(), a.id).run();
+  await platformAudit(c.env, a.id, "ops.login", null, null, { mfa: method });
+  await issueOpsSession(c, a, a.token_version);
+  return c.json({ ok: true });
+});
+
+// パスワードを忘れた場合（メール送信サービス設定時のみ。二段階認証は引き続き必要）
+r.post("/forgot", async (c) => {
+  const b = await body(c, z.object({ email: z.string().email() }));
+  const a = await c.env.DB.prepare("SELECT id, name, email FROM platform_admins WHERE email = ? AND active = 1").bind(b.email.toLowerCase()).first<{ id: string; name: string; email: string }>();
+  if (a) await sendResetMail(c.env, c.req.url, "ops", a.id, a.email, a.name);
+  // アカウントの有無は応答から分からないようにする
+  return c.json({ ok: true });
+});
+
+r.post("/reset", async (c) => {
+  const b = await body(c, z.object({ token: z.string().min(20), password: z.string().min(10) }));
+  const accountId = await consumeResetToken(c.env, "ops", b.token);
+  await c.env.DB.prepare("UPDATE platform_admins SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(await hashPassword(b.password), accountId).run();
+  await platformAudit(c.env, accountId, "ops.password_reset", "platform_admin", accountId);
   return c.json({ ok: true });
 });
 
@@ -57,7 +129,86 @@ r.post("/logout", (c) => {
 // ---------- 以降は運営ログイン必須 ----------
 r.use("*", requireOps);
 
-r.get("/me", (c) => c.json(c.get("ops")));
+r.get("/me", async (c) => {
+  const o = c.get("ops");
+  const a = await c.env.DB.prepare("SELECT totp_enabled, recovery_codes_json FROM platform_admins WHERE id = ?").bind(o.id).first<{ totp_enabled: number; recovery_codes_json: string | null }>();
+  const settings = await getSettings(c.env);
+  return c.json({
+    ...o,
+    totpEnabled: !!a?.totp_enabled,
+    recoveryCodesLeft: parseJson<string[]>(a?.recovery_codes_json, []).length,
+    mfaSetupRequired: settings.require_ops_2fa === "1" && !a?.totp_enabled
+  });
+});
+
+// ---------- 二段階認証（TOTP） ----------
+r.post("/2fa/setup", async (c) => {
+  const o = c.get("ops");
+  const secret = newTotpSecret();
+  await c.env.DB.prepare("UPDATE platform_admins SET totp_pending = ? WHERE id = ?").bind(await sealSecret(secret, c.env.TAG_KEY_SECRET), o.id).run();
+  const uri = otpauthUri(secret, o.email);
+  return c.json({ secret, uri, qrSvg: qrSvg(uri, { size: 200, ecc: "M" }) });
+});
+
+function newRecoveryCodes() {
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  return Array.from({ length: 10 }, () => {
+    const r = crypto.getRandomValues(new Uint8Array(8));
+    const s = Array.from(r, (b) => alphabet[b % alphabet.length]).join("");
+    return `${s.slice(0, 4)}-${s.slice(4)}`;
+  });
+}
+
+r.post("/2fa/enable", async (c) => {
+  const o = c.get("ops");
+  const b = await body(c, z.object({ code: z.string() }));
+  const a = await c.env.DB.prepare("SELECT totp_pending FROM platform_admins WHERE id = ?").bind(o.id).first<{ totp_pending: string | null }>();
+  if (!a?.totp_pending) fail(400, "先にQRコードを表示してください");
+  const secret = await openSecret(a.totp_pending, c.env.TAG_KEY_SECRET);
+  const step = await verifyTotp(secret, b.code, 0);
+  if (step === null) fail(401, "確認コードが違います。認証アプリに表示されている6桁を入力してください", "mfa_invalid");
+  const codes = newRecoveryCodes();
+  const hashes = await Promise.all(codes.map((x) => sha256Hex(x.replace("-", ""))));
+  await c.env.DB.prepare(
+    "UPDATE platform_admins SET totp_secret = totp_pending, totp_pending = NULL, totp_enabled = 1, totp_last_step = ?, recovery_codes_json = ? WHERE id = ?"
+  )
+    .bind(step, JSON.stringify(hashes), o.id)
+    .run();
+  await platformAudit(c.env, o.id, "ops.2fa_enable", "platform_admin", o.id);
+  return c.json({ recoveryCodes: codes });
+});
+
+async function requireCurrentTotp(env: Env, adminId: string, code: string) {
+  const a = await env.DB.prepare("SELECT totp_secret, totp_last_step FROM platform_admins WHERE id = ?").bind(adminId).first<{ totp_secret: string | null; totp_last_step: number }>();
+  if (!a?.totp_secret) fail(400, "二段階認証が有効ではありません");
+  const step = await verifyTotp(await openSecret(a.totp_secret, env.TAG_KEY_SECRET), code, a.totp_last_step);
+  if (step === null) fail(401, "確認コードが違います", "mfa_invalid");
+  await env.DB.prepare("UPDATE platform_admins SET totp_last_step = ? WHERE id = ?").bind(step, adminId).run();
+}
+
+r.post("/2fa/recovery-codes", async (c) => {
+  const o = c.get("ops");
+  const b = await body(c, z.object({ code: z.string() }));
+  await requireCurrentTotp(c.env, o.id, b.code);
+  const codes = newRecoveryCodes();
+  await c.env.DB.prepare("UPDATE platform_admins SET recovery_codes_json = ? WHERE id = ?")
+    .bind(JSON.stringify(await Promise.all(codes.map((x) => sha256Hex(x.replace("-", ""))))), o.id)
+    .run();
+  await platformAudit(c.env, o.id, "ops.2fa_recovery_regenerate", "platform_admin", o.id);
+  return c.json({ recoveryCodes: codes });
+});
+
+r.post("/2fa/disable", async (c) => {
+  const o = c.get("ops");
+  const b = await body(c, z.object({ code: z.string() }));
+  const settings = await getSettings(c.env);
+  if (settings.require_ops_2fa === "1") fail(403, "二段階認証が必須に設定されているため無効化できません");
+  await requireCurrentTotp(c.env, o.id, b.code);
+  await c.env.DB.prepare("UPDATE platform_admins SET totp_secret = NULL, totp_enabled = 0, recovery_codes_json = NULL WHERE id = ?").bind(o.id).run();
+  await platformAudit(c.env, o.id, "ops.2fa_disable", "platform_admin", o.id);
+  return c.json({ ok: true });
+});
+
 
 r.post("/change-password", async (c) => {
   const o = c.get("ops");
@@ -193,8 +344,17 @@ r.post("/tenants", async (c) => {
     fail(409, "会社コードまたは管理者メールアドレスが既に使われています");
   }
   await platformAudit(c.env, o.id, "tenant.create", "organization", orgId, { code: b.code, plan: b.plan, status: b.status });
+  const mail = await sendWelcomeMail(c.env, c.req.url, {
+    orgId,
+    to: b.admin.email.toLowerCase(),
+    name: b.admin.name,
+    orgName: b.name,
+    orgCode: b.code.toUpperCase(),
+    password: b.admin.password ? null : password,
+    trialEndsAt: b.status === "trial" ? t + b.trialDays * DAY : null
+  });
   await audit(c.env, orgId, null, "org.created_by_platform", "organization", orgId, { by: o.name });
-  return c.json({ id: orgId, orgCode: b.code.toUpperCase(), adminEmail: b.admin.email.toLowerCase(), initialPassword: b.admin.password ? null : password });
+  return c.json({ id: orgId, orgCode: b.code.toUpperCase(), adminEmail: b.admin.email.toLowerCase(), initialPassword: b.admin.password ? null : password, mailStatus: mail });
 });
 
 r.get("/tenants/:id", async (c) => {
@@ -287,7 +447,23 @@ r.post("/tenants/:id/users/:userId/reset-password", async (c) => {
   await c.env.DB.prepare("UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(await hashPassword(pw), u.id).run();
   await platformAudit(c.env, o.id, "tenant.reset_password", "user", u.id, { orgId: c.req.param("id") });
   await audit(c.env, c.req.param("id"), null, "user.password_reset_by_platform", "user", u.id, { by: o.name });
-  return c.json({ temporaryPassword: pw });
+  const full = await c.env.DB.prepare("SELECT u.name, u.email, u.employee_code, o.name AS org_name, o.code FROM users u JOIN organizations o ON o.id = u.org_id WHERE u.id = ?")
+    .bind(u.id)
+    .first<{ name: string; email: string | null; employee_code: string; org_name: string; code: string }>();
+  let mailStatus: string | null = null;
+  if (full?.email) {
+    const cfg = await getNotifyConfig(c.env);
+    const base = cfg.baseUrl || new URL(c.req.url).origin;
+    const tpl = emailTemplate(
+      cfg,
+      "パスワードを再発行しました",
+      [`${full.name} 様`, "", `${full.org_name} の Intent-Trace アカウントのパスワードを運営にて再発行しました。`, "", `仮パスワード: ${pw}`, "", "ログイン後、「契約・サポート」→「パスワード」から変更してください。"],
+      { label: "ログインする", url: `${base}/login${u.role === "worker" ? "" : "?next=/admin"}` }
+    );
+    const [r0] = await notify(c.env, [{ orgId: c.req.param("id"), channel: "email", to: full.email, toLabel: full.name, eventType: "password_reset", refId: u.id, subject: "【Intent-Trace】パスワード再発行のお知らせ", body: tpl.text, html: tpl.html }], cfg);
+    mailStatus = r0.status;
+  }
+  return c.json({ temporaryPassword: pw, mailStatus });
 });
 
 /** 代理ログイン（サポート用）: テナント管理者として1時間だけ操作。テナント側の監査ログにも記録 */
@@ -473,15 +649,18 @@ r.get("/stock/labels", async (c) => {
   )
     .bind(batch ?? null, batch ?? null, orgId ?? null, orgId ?? null)
     .all<{ id: string; item_type: string; org_name: string | null }>();
+  const origin = new URL(c.req.url).origin;
+  const withQr = c.req.query("qr") !== "0";
   const cells = results
     .map(
       (s) =>
-        `<div class="l"><div class="b">Intent-Trace</div><div class="id">${s.id.slice(0, 5)}-${s.id.slice(5)}</div><div class="s">${s.item_type === "badge" ? "社員証" : "NFCタグ"}${s.org_name ? ` / ${s.org_name.replace(/[<>&]/g, "")}` : ""}</div></div>`
+        `<div class="l">${withQr && s.item_type !== "badge" ? `<div class="q">${qrSvg(tagQrUrl(origin, s.id), { margin: 1 })}</div>` : ""}<div class="t"><div class="b">Intent-Trace</div><div class="id">${s.id.slice(0, 5)}-${s.id.slice(5)}</div><div class="s">${s.item_type === "badge" ? "社員証" : "NFCタグ / QR"}${s.org_name ? `<br>${s.org_name.replace(/[<>&]/g, "")}` : ""}</div></div></div>`
     )
     .join("");
   return c.html(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>ラベル ${batch ?? ""}</title><style>
   body{margin:10mm;font-family:"Hiragino Sans","Noto Sans JP",sans-serif}.g{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm}
-  .l{border:1px dashed #999;border-radius:3mm;padding:3mm;text-align:center;height:22mm;box-sizing:border-box}
+  .l{border:1px dashed #999;border-radius:3mm;padding:2mm;height:26mm;box-sizing:border-box;display:flex;align-items:center;gap:2mm;overflow:hidden}
+  .q{width:21mm;height:21mm;flex:none}.q svg{width:100%;height:100%}.t{text-align:left;min-width:0}
   .b{font-size:8pt;color:#b45309;font-weight:bold}.id{font-family:ui-monospace,monospace;font-size:15pt;font-weight:bold;letter-spacing:.05em;margin:1mm 0}.s{font-size:7pt;color:#555}
   @media print{.np{display:none}}</style></head><body><button class="np" onclick="print()">印刷</button><p class="np">${results.length}枚</p><div class="g">${cells}</div></body></html>`);
 });
@@ -607,6 +786,7 @@ r.patch("/invoices/:id", async (c) => {
   const defaultDue = Date.UTC(y, m + 1, 0, 14, 59) ;
   if (b.status === "issued") {
     await c.env.DB.prepare("UPDATE invoices SET status = 'issued', issued_at = COALESCE(issued_at, ?), due_at = COALESCE(?, due_at, ?) WHERE id = ?").bind(t, b.dueAt ?? null, defaultDue, c.req.param("id")).run();
+    await sendInvoiceMail(c.env, c.req.url, c.req.param("id"));
   } else if (b.status === "paid") {
     await c.env.DB.prepare("UPDATE invoices SET status = 'paid', paid_at = ?, issued_at = COALESCE(issued_at, ?) WHERE id = ?").bind(t, t, c.req.param("id")).run();
   } else {
@@ -614,6 +794,13 @@ r.patch("/invoices/:id", async (c) => {
   }
   await platformAudit(c.env, o.id, `invoice.${b.status}`, "invoice", c.req.param("id"));
   return c.json({ ok: true });
+});
+
+r.post("/invoices/:id/send", async (c) => {
+  const o = c.get("ops");
+  const n = await sendInvoiceMail(c.env, c.req.url, c.req.param("id"), true);
+  await platformAudit(c.env, o.id, "invoice.send", "invoice", c.req.param("id"), { recipients: n });
+  return c.json({ recipients: n });
 });
 
 r.post("/invoices/:id/recalculate", async (c) => {
@@ -715,8 +902,53 @@ r.patch("/tickets/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------- 通知（送信履歴・テスト送信） ----------
+r.get("/notifications", async (c) => {
+  const status = c.req.query("status") ?? null;
+  const { results } = await c.env.DB.prepare(
+    `SELECT n.id, n.org_id, o.name AS org_name, n.channel, n.to_address, n.to_label, n.event_type, n.subject, n.status, n.attempts, n.last_error, n.created_at, n.sent_at
+       FROM notification_outbox n LEFT JOIN organizations o ON o.id = n.org_id WHERE (? IS NULL OR n.status = ?) ORDER BY n.created_at DESC LIMIT 300`
+  )
+    .bind(status, status)
+    .all();
+  return c.json(results);
+});
+
+r.get("/notifications/:id", async (c) => {
+  const n = await c.env.DB.prepare("SELECT * FROM notification_outbox WHERE id = ?").bind(c.req.param("id")).first();
+  if (!n) fail(404, "見つかりません");
+  return c.json(n);
+});
+
+r.post("/notifications/:id/retry", async (c) => {
+  await c.env.DB.prepare("UPDATE notification_outbox SET status = 'pending', attempts = 0 WHERE id = ?").bind(c.req.param("id")).run();
+  await retryOutbox(c.env);
+  const n = await c.env.DB.prepare("SELECT status, last_error FROM notification_outbox WHERE id = ?").bind(c.req.param("id")).first();
+  return c.json(n);
+});
+
+r.post("/notifications/test", async (c) => {
+  const o = c.get("ops");
+  const b = await body(c, z.object({ channel: z.enum(["email", "line"]), to: z.string().min(3) }));
+  const cfg = await getNotifyConfig(c.env);
+  const tpl = emailTemplate(cfg, "Intent-Trace テスト通知", ["このメッセージは運営コンソールからのテスト送信です。", `送信者: ${o.name}`]);
+  const [res] = await notify(c.env, [{ orgId: null, channel: b.channel, to: b.to, eventType: "test", subject: "Intent-Trace テスト通知", body: b.channel === "line" ? "✅ Intent-Trace テスト通知です" : tpl.text, html: tpl.html }], cfg);
+  const row = await c.env.DB.prepare("SELECT status, last_error FROM notification_outbox WHERE id = ?").bind(res.id).first();
+  return c.json(row);
+});
+
 // ---------- 設定・運営アカウント ----------
-r.get("/settings", async (c) => c.json(await getSettings(c.env)));
+r.get("/settings", async (c) => {
+  const all = await getSettings(c.env);
+  const out: Record<string, string> = {};
+  const secrets: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(all)) {
+    if (k.startsWith("secret:")) secrets[k.slice(7)] = !!v;
+    else out[k] = v;
+  }
+  const lineWebhookUrl = `${new URL(c.req.url).origin}/api/line/webhook`;
+  return c.json({ ...out, secrets, lineWebhookUrl });
+});
 
 r.put("/settings", requireOpsOwner, async (c) => {
   const o = c.get("ops");
@@ -729,10 +961,25 @@ r.put("/settings", requireOpsOwner, async (c) => {
         invoice_registration_no: z.string().max(20),
         bank_info: z.string().max(1000),
         support_email: z.string().max(200),
-        tax_rate: z.string().regex(/^\d{1,2}$/)
+        tax_rate: z.string().regex(/^\d{1,2}$/),
+        email_provider: z.enum(["none", "resend", "brevo", "sendgrid"]),
+        email_from: z.string().max(200),
+        email_from_name: z.string().max(100),
+        line_bot_basic_id: z.string().max(40),
+        app_base_url: z.string().max(200),
+        require_ops_2fa: z.enum(["0", "1"]),
+        // 秘密情報（空文字で削除、undefined で変更なし）
+        email_api_key: z.string().max(500),
+        line_channel_secret: z.string().max(200),
+        line_channel_token: z.string().max(1000)
       })
       .partial()
   );
+  for (const k of SECRET_SETTINGS) {
+    const v = (b as Record<string, string | undefined>)[k];
+    if (v !== undefined) await putSecretSetting(c.env, k, v.trim());
+    delete (b as Record<string, string | undefined>)[k];
+  }
   const entries = Object.entries(b).filter(([, v]) => v !== undefined) as [string, string][];
   if (!entries.length) return c.json({ ok: true });
   await c.env.DB.batch(entries.map(([k, v]) => c.env.DB.prepare("INSERT INTO platform_settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(k, v)));
@@ -741,7 +988,7 @@ r.put("/settings", requireOpsOwner, async (c) => {
 });
 
 r.get("/admins", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT id, email, name, role, active, last_login_at, created_at FROM platform_admins ORDER BY created_at").all();
+  const { results } = await c.env.DB.prepare("SELECT id, email, name, role, active, totp_enabled, last_login_at, created_at FROM platform_admins ORDER BY created_at").all();
   return c.json(results);
 });
 
@@ -758,12 +1005,20 @@ r.post("/admins", requireOpsOwner, async (c) => {
     fail(409, "このメールアドレスは既に登録されています");
   }
   await platformAudit(c.env, o.id, "admin.create", "platform_admin", id, { email: b.email, role: b.role });
-  return c.json({ id, temporaryPassword: pw });
+  const cfg = await getNotifyConfig(c.env);
+  const base = cfg.baseUrl || new URL(c.req.url).origin;
+  const tpl = emailTemplate(cfg, "運営コンソールのアカウントを作成しました", [`${b.name} 様`, "", `${o.name} さんが Intent-Trace 運営コンソールのアカウントを作成しました。`, "", `メール: ${b.email}`, `仮パスワード: ${pw}`, "", "ログイン後、パスワードの変更と二段階認証の設定を行ってください。"], { label: "運営コンソールを開く", url: `${base}/ops/login` });
+  const [m] = await notify(c.env, [{ orgId: null, channel: "email", to: b.email.toLowerCase(), toLabel: b.name, eventType: "invite", refId: id, subject: "【Intent-Trace】運営コンソールへのご招待", body: tpl.text, html: tpl.html }], cfg);
+  return c.json({ id, temporaryPassword: pw, mailStatus: m.status });
 });
 
 r.patch("/admins/:id", requireOpsOwner, async (c) => {
   const o = c.get("ops");
-  const b = await body(c, z.object({ active: z.boolean().optional(), role: z.enum(["owner", "staff"]).optional(), resetPassword: z.boolean().optional() }));
+  const b = await body(c, z.object({ active: z.boolean().optional(), role: z.enum(["owner", "staff"]).optional(), resetPassword: z.boolean().optional(), reset2fa: z.boolean().optional() }));
+  if (b.reset2fa) {
+    if (c.req.param("id") === o.id) fail(400, "自分の二段階認証は「二段階認証」の画面から変更してください");
+    await c.env.DB.prepare("UPDATE platform_admins SET totp_secret = NULL, totp_pending = NULL, totp_enabled = 0, recovery_codes_json = NULL, token_version = token_version + 1 WHERE id = ?").bind(c.req.param("id")).run();
+  }
   if (c.req.param("id") === o.id && (b.active === false || b.role === "staff")) fail(400, "自分自身の権限は変更できません");
   let pw: string | null = null;
   if (b.active !== undefined) await c.env.DB.prepare("UPDATE platform_admins SET active = ?, token_version = token_version + 1 WHERE id = ?").bind(b.active ? 1 : 0, c.req.param("id")).run();
@@ -772,7 +1027,7 @@ r.patch("/admins/:id", requireOpsOwner, async (c) => {
     pw = tempPassword();
     await c.env.DB.prepare("UPDATE platform_admins SET password_hash = ?, token_version = token_version + 1 WHERE id = ?").bind(await hashPassword(pw), c.req.param("id")).run();
   }
-  await platformAudit(c.env, o.id, "admin.update", "platform_admin", c.req.param("id"), { ...b, resetPassword: !!b.resetPassword });
+  await platformAudit(c.env, o.id, "admin.update", "platform_admin", c.req.param("id"), { ...b, resetPassword: !!b.resetPassword, reset2fa: !!b.reset2fa });
   return c.json({ ok: true, temporaryPassword: pw });
 });
 

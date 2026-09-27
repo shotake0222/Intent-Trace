@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 import { useApi } from "../../lib/hooks";
 import { ApiError, del, patch, post, put } from "../../lib/api";
 import { useOps } from "./OpsLayout";
+import { MfaCard, NotifySettingsCard } from "./OpsSecurity";
 import { Alert, Badge, Button, Card, Empty, Field, Input, Select, Textarea, cx } from "../../components/ui";
 import { Modal } from "../../components/Modal";
 import { FEATURE_LABEL, TICKET_CATEGORY_LABEL, TICKET_STATUS_LABEL, fmtAgo, fmtDateTime, yen } from "../../lib/format";
@@ -392,7 +393,7 @@ function OpsTicket({ id, onChange }: { id: string; onChange: () => void }) {
 export function OpsSettings() {
   const { me } = useOps();
   const settings = useApi<Record<string, string>>("/ops/settings");
-  const admins = useApi<{ id: string; email: string; name: string; role: string; active: number; last_login_at: number | null }[]>("/ops/admins");
+  const admins = useApi<{ id: string; email: string; name: string; role: string; active: number; totp_enabled: number; last_login_at: number | null }[]>("/ops/admins");
   const [s, setS] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ tone: "green" | "red" | "amber"; text: string } | null>(null);
   const [newAdmin, setNewAdmin] = useState(false);
@@ -401,7 +402,7 @@ export function OpsSettings() {
   const act = async (fn: () => Promise<unknown>, ok: string) => {
     try {
       await fn();
-      setMsg({ tone: "green", text: ok });
+      if (ok) setMsg({ tone: "green", text: ok });
     } catch (e) {
       setMsg({ tone: "red", text: e instanceof ApiError ? e.message : String(e) });
     }
@@ -426,7 +427,19 @@ export function OpsSettings() {
             {field("support_email", "サポート窓口メール")}
             {field("tax_rate", "消費税率（%）")}
             {owner && (
-              <Button className="!bg-indigo-700" onClick={() => act(() => put("/ops/settings", s), "保存しました")}>
+              <Button
+                className="!bg-indigo-700"
+                onClick={() =>
+                  act(
+                    () =>
+                      put(
+                        "/ops/settings",
+                        Object.fromEntries(["company_name", "company_address", "invoice_registration_no", "bank_info", "support_email", "tax_rate"].map((k) => [k, s[k] ?? ""]))
+                      ),
+                    "保存しました"
+                  )
+                }
+              >
                 保存
               </Button>
             )}
@@ -439,7 +452,8 @@ export function OpsSettings() {
                 <li key={a.id} className={cx("flex items-center justify-between gap-2 py-2", !a.active && "opacity-40")}>
                   <div>
                     <div className="font-semibold">
-                      {a.name} <Badge tone={a.role === "owner" ? "blue" : "slate"}>{a.role === "owner" ? "オーナー" : "スタッフ"}</Badge>
+                      {a.name} <Badge tone={a.role === "owner" ? "blue" : "slate"}>{a.role === "owner" ? "オーナー" : "スタッフ"}</Badge>{" "}
+                      <Badge tone={a.totp_enabled ? "green" : "amber"}>{a.totp_enabled ? "2FA" : "2FA未設定"}</Badge>
                     </div>
                     <div className="text-xs text-slate-500">
                       {a.email} ・ 最終ログイン {fmtAgo(a.last_login_at)}
@@ -459,6 +473,18 @@ export function OpsSettings() {
                       >
                         PW再発行
                       </Button>
+                      {!!a.totp_enabled && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            if (confirm(`${a.name} の二段階認証をリセットしますか？（端末紛失時など。本人は次回ログイン後に再設定します）`))
+                              void act(async () => (await patch(`/ops/admins/${a.id}`, { reset2fa: true }), admins.reload()), "二段階認証をリセットしました");
+                          }}
+                        >
+                          2FAリセット
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => act(async () => (await patch(`/ops/admins/${a.id}`, { active: !a.active }), admins.reload()), a.active ? "無効化しました" : "有効化しました")}>
                         {a.active ? "無効化" : "有効化"}
                       </Button>
@@ -468,6 +494,29 @@ export function OpsSettings() {
               ))}
             </ul>
           </Card>
+          <MfaCard />
+          {owner && (
+            <Card title="セキュリティポリシー">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-5 w-5"
+                  checked={s.require_ops_2fa === "1"}
+                  onChange={(e) =>
+                    act(async () => {
+                      await put("/ops/settings", { require_ops_2fa: e.target.checked ? "1" : "0" });
+                      setS({ ...s, require_ops_2fa: e.target.checked ? "1" : "0" });
+                    }, e.target.checked ? "二段階認証を必須にしました" : "必須設定を解除しました")
+                  }
+                />
+                <span>
+                  <b>全運営アカウントに二段階認証を必須にする</b>
+                  <br />
+                  <span className="text-slate-500">未設定のアカウントはログイン後、設定が完了するまで他の機能を使えません。</span>
+                </span>
+              </label>
+            </Card>
+          )}
           <Card title="自分のパスワード変更">
             <div className="space-y-3">
               <Field label="現在のパスワード">
@@ -483,6 +532,7 @@ export function OpsSettings() {
           </Card>
         </div>
       </div>
+      <NotifySettingsCard owner={owner} />
       {newAdmin && <NewAdmin onClose={() => setNewAdmin(false)} onDone={(t) => (setNewAdmin(false), setMsg({ tone: "amber", text: t }), void admins.reload())} />}
     </div>
   );
@@ -512,8 +562,8 @@ function NewAdmin({ onClose, onDone }: { onClose: () => void; onDone: (t: string
           disabled={!f.name || !f.email}
           onClick={async () => {
             try {
-              const r = await post<{ temporaryPassword: string }>("/ops/admins", f);
-              onDone(`${f.name} を追加しました。仮パスワード: ${r.temporaryPassword}（ログイン画面: ${location.origin}/ops/login）`);
+              const r = await post<{ temporaryPassword: string; mailStatus: string }>("/ops/admins", f);
+              onDone(`${f.name} を追加しました。仮パスワード: ${r.temporaryPassword}（ログイン画面: ${location.origin}/ops/login）${r.mailStatus === "sent" ? " ／ 招待メールを送信しました" : ""}`);
             } catch (e) {
               setErr(e instanceof ApiError ? e.message : String(e));
             }

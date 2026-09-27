@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { LiveEvent, Role, Severity } from "../../shared/types";
+import { notifyAlert } from "./notify";
 
 export interface SessionUser {
   id: string;
@@ -81,6 +82,12 @@ export async function raiseAlert(
     .bind(id, a.orgId, a.siteId, a.type, a.severity, a.userId ?? null, a.refId ?? null, a.message, at)
     .run();
   await broadcast(env, { type: "alert", siteId: a.siteId, at, data: { id, type: a.type, severity: a.severity, message: a.message, userId: a.userId ?? null } });
+  // メール・LINE 通知（失敗しても本処理は止めない。失敗分は cron で再送）
+  try {
+    await notifyAlert(env, { orgId: a.orgId, siteId: a.siteId, severity: a.severity, type: a.type, message: a.message, alertId: id });
+  } catch (e) {
+    console.error("notifyAlert failed", e);
+  }
   return id;
 }
 

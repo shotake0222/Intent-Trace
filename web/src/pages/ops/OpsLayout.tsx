@@ -2,12 +2,16 @@ import { createContext, useContext, useEffect, useState, type FormEvent } from "
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { ApiError, get, post } from "../../lib/api";
 import { Alert, Button, Field, Input, Spinner, cx } from "../../components/ui";
+import { MfaCard } from "./OpsSecurity";
 
 export interface OpsMe {
   id: string;
   name: string;
   email: string;
   role: "owner" | "staff";
+  totpEnabled: boolean;
+  recoveryCodesLeft: number;
+  mfaSetupRequired: boolean;
 }
 const Ctx = createContext<{ me: OpsMe; reload: () => void }>(null!);
 export const useOps = () => useContext(Ctx);
@@ -20,7 +24,8 @@ const NAV = [
   { to: "/ops/plans", label: "料金プラン" },
   { to: "/ops/announcements", label: "お知らせ配信" },
   { to: "/ops/support", label: "サポート" },
-  { to: "/ops/settings", label: "設定・運営アカウント" },
+  { to: "/ops/notifications", label: "通知履歴" },
+  { to: "/ops/settings", label: "設定・通知・セキュリティ" },
   { to: "/ops/audit", label: "運営監査ログ" }
 ];
 
@@ -90,7 +95,14 @@ export default function OpsLayout() {
             </div>
           </header>
           <main className="mx-auto max-w-7xl p-4 lg:p-8">
-            <Outlet />
+            {me.mfaSetupRequired ? (
+              <div className="mx-auto max-w-xl space-y-4">
+                <Alert tone="amber">運営コンソールでは二段階認証が必須に設定されています。設定を完了すると各機能を利用できます。</Alert>
+                <MfaCard onChanged={() => void load()} />
+              </div>
+            ) : (
+              <Outlet />
+            )}
           </main>
         </div>
       </div>
@@ -107,6 +119,8 @@ export function OpsLogin() {
   const [f, setF] = useState({ setupToken: "", name: "", email: "", password: "", password2: "" });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [mode, setMode] = useState<"login" | "forgot" | "sent">("login");
   useEffect(() => {
     void get<{ initialized: boolean }>("/ops/status").then((s) => setInitialized(s.initialized));
   }, []);
@@ -118,8 +132,13 @@ export function OpsLogin() {
     if (!initialized && f.password !== f.password2) return setErr("確認用パスワードが一致しません");
     setBusy(true);
     try {
-      if (initialized) await post("/ops/login", { email: f.email, password: f.password });
-      else await post("/ops/bootstrap", { setupToken: f.setupToken.trim(), name: f.name, email: f.email, password: f.password });
+      if (initialized) {
+        const r = await post<{ ok?: boolean; mfaRequired?: boolean; mfaToken?: string }>("/ops/login", { email: f.email, password: f.password });
+        if (r.mfaRequired && r.mfaToken) {
+          setMfaToken(r.mfaToken);
+          return;
+        }
+      } else await post("/ops/bootstrap", { setupToken: f.setupToken.trim(), name: f.name, email: f.email, password: f.password });
       nav(next, { replace: true });
     } catch (x) {
       setErr(x instanceof ApiError ? x.message : "通信エラー");
@@ -140,6 +159,26 @@ export function OpsLogin() {
         </div>
         {initialized === null ? (
           <Spinner />
+        ) : mfaToken ? (
+          <MfaStep mfaToken={mfaToken} onDone={() => nav(next, { replace: true })} onExpired={() => (setMfaToken(null), setErr("有効期限が切れました。もう一度ログインしてください"))} />
+        ) : mode !== "login" ? (
+          <div className="space-y-4 rounded-2xl bg-white p-5 text-slate-900">
+            {mode === "sent" ? (
+              <Alert tone="green">登録されているアドレスであれば、再設定用のリンクを送信しました。メールをご確認ください（有効期限1時間）。</Alert>
+            ) : (
+              <>
+                <Field label="登録メールアドレス">
+                  <Input type="email" value={f.email} onChange={set("email")} />
+                </Field>
+                <Button className="w-full !bg-indigo-700" disabled={!f.email} onClick={async () => (await post("/ops/forgot", { email: f.email }).catch(() => {}), setMode("sent"))}>
+                  再設定リンクを送る
+                </Button>
+              </>
+            )}
+            <button className="text-sm text-indigo-700" onClick={() => setMode("login")}>
+              ‹ ログインに戻る
+            </button>
+          </div>
         ) : (
           <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-5 text-slate-900">
             {!initialized && (
@@ -168,8 +207,108 @@ export function OpsLogin() {
             <Button type="submit" size="lg" className="w-full !bg-indigo-700 hover:!bg-indigo-600" disabled={busy}>
               {busy ? "処理中…" : initialized ? "ログイン" : "オーナーを作成してログイン"}
             </Button>
+            {initialized && (
+              <button type="button" className="text-sm text-indigo-700" onClick={() => setMode("forgot")}>
+                パスワードを忘れた方
+              </button>
+            )}
           </form>
         )}
+      </div>
+    </div>
+  );
+}
+
+function MfaStep({ mfaToken, onDone, onExpired }: { mfaToken: string; onDone: () => void; onExpired: () => void }) {
+  const [code, setCode] = useState("");
+  const [recovery, setRecovery] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await post("/ops/login/mfa", recovery ? { mfaToken, recoveryCode: code } : { mfaToken, code });
+      onDone();
+    } catch (x) {
+      if (x instanceof ApiError && x.code === "mfa_expired") onExpired();
+      else setErr(x instanceof ApiError ? x.message : "通信エラー");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-5 text-slate-900">
+      <div className="font-bold">二段階認証</div>
+      <p className="text-sm text-slate-600">{recovery ? "保管しているリカバリーコード（XXXX-XXXX）を入力してください。各コードは1回だけ使えます。" : "認証アプリ（Google Authenticator など）に表示されている6桁のコードを入力してください。"}</p>
+      <Input
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        inputMode={recovery ? "text" : "numeric"}
+        autoComplete="one-time-code"
+        autoFocus
+        maxLength={recovery ? 9 : 6}
+        className="text-center font-mono text-2xl tracking-[.3em]"
+        placeholder={recovery ? "XXXX-XXXX" : "000000"}
+      />
+      {err && <Alert>{err}</Alert>}
+      <Button type="submit" size="lg" className="w-full !bg-indigo-700" disabled={busy || code.replace(/[\s-]/g, "").length < (recovery ? 8 : 6)}>
+        {busy ? "確認中…" : "確認"}
+      </Button>
+      <button type="button" className="text-sm text-indigo-700" onClick={() => (setRecovery(!recovery), setCode(""))}>
+        {recovery ? "認証アプリのコードを使う" : "認証アプリが使えない場合（リカバリーコード）"}
+      </button>
+    </form>
+  );
+}
+
+/** メールのリンクから開くパスワード再設定（運営・テナント共通） */
+export function ResetPassword({ kind }: { kind: "ops" | "user" }) {
+  const nav = useNavigate();
+  const token = new URLSearchParams(useLocation().search).get("token") ?? "";
+  const [pw, setPw] = useState({ a: "", b: "" });
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const min = kind === "ops" ? 10 : 8;
+  return (
+    <div className={cx("min-h-screen px-4 py-12 text-white", kind === "ops" ? "bg-indigo-950" : "bg-slate-900")}>
+      <div className="mx-auto max-w-sm">
+        <div className="mb-8 text-2xl font-bold">パスワードの再設定</div>
+        <div className="space-y-4 rounded-2xl bg-white p-5 text-slate-900">
+          {done ? (
+            <>
+              <Alert tone="green">パスワードを変更しました。新しいパスワードでログインしてください。</Alert>
+              <Button className="w-full" onClick={() => nav(kind === "ops" ? "/ops/login" : "/login?next=/admin")}>
+                ログイン画面へ
+              </Button>
+            </>
+          ) : (
+            <>
+              <Field label={`新しいパスワード（${min}文字以上）`}>
+                <Input type="password" value={pw.a} onChange={(e) => setPw({ ...pw, a: e.target.value })} autoComplete="new-password" />
+              </Field>
+              <Field label="新しいパスワード（確認）">
+                <Input type="password" value={pw.b} onChange={(e) => setPw({ ...pw, b: e.target.value })} autoComplete="new-password" />
+              </Field>
+              {err && <Alert>{err}</Alert>}
+              <Button
+                className="w-full"
+                disabled={pw.a.length < min || pw.a !== pw.b || !token}
+                onClick={async () => {
+                  try {
+                    await post(kind === "ops" ? "/ops/reset" : "/auth/reset", { token, password: pw.a });
+                    setDone(true);
+                  } catch (x) {
+                    setErr(x instanceof ApiError ? x.message : "通信エラー");
+                  }
+                }}
+              >
+                変更する
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

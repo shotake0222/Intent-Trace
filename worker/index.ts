@@ -13,6 +13,8 @@ import analytics from "./routes/analytics";
 import reports from "./routes/reports";
 import ops from "./routes/ops";
 import account from "./routes/account";
+import line from "./routes/line";
+import { runScheduled } from "./cron";
 
 export { EquipmentLock } from "./do/EquipmentLock";
 export { DeadmanTimer } from "./do/DeadmanTimer";
@@ -40,6 +42,7 @@ app.route("/api/analytics", analytics);
 app.route("/api/reports", reports);
 app.route("/api/ops", ops);
 app.route("/api/account", account);
+app.route("/api/line", line);
 app.route("/api", field);
 
 // ダッシュボードのリアルタイム購読
@@ -60,4 +63,9 @@ app.onError((err, c) => {
   return c.json({ error: "サーバーエラーが発生しました" }, 500);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runScheduled(env).then((r) => console.log("scheduled", JSON.stringify(r))));
+  }
+} satisfies ExportedHandler<Env>;

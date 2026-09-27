@@ -25,6 +25,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState<"off" | "form" | "sent">("off");
 
   if (me) return <Navigate to={next ?? (me.role === "worker" ? "/" : "/admin")} replace />;
 
@@ -101,7 +102,32 @@ export default function Login() {
           <Button type="submit" size="lg" className="w-full" disabled={busy}>
             {busy ? "確認中…" : "ログイン"}
           </Button>
+          {mode === "admin" ? (
+            <button type="button" className="text-sm text-slate-600 underline" onClick={() => setForgot("form")}>
+              パスワードを忘れた方
+            </button>
+          ) : (
+            <p className="text-xs text-slate-500">PINを忘れた場合は、現場の管理者に再設定を依頼してください。</p>
+          )}
         </form>
+        {forgot !== "off" && (
+          <div className="mt-4 space-y-3 rounded-2xl bg-white p-5 text-slate-900">
+            {forgot === "sent" ? (
+              <Alert tone="green">登録されているアドレスであれば、パスワード再設定用のリンクを送信しました（有効期限1時間）。</Alert>
+            ) : (
+              <>
+                <div className="text-sm font-semibold">登録メールアドレスに再設定リンクを送ります</div>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="メールアドレス" />
+                <Button className="w-full" disabled={!email} onClick={async () => (await post("/auth/forgot", { email }).catch(() => {}), setForgot("sent"))}>
+                  送信
+                </Button>
+              </>
+            )}
+            <button className="text-sm text-slate-500" onClick={() => setForgot("off")}>
+              閉じる
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
