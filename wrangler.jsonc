@@ -5,11 +5,11 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  // PWA (web/) のビルド成果物を同一Workerから配信。/api/* と /ws/* はWorkerが先に処理。
+  // PWA (web/) のビルド成果物を同一Workerから配信。/api/*・/ws/*・トップ(/) はWorkerが先に処理（未ログインの / はLPを表示）。
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/ws/*"]
+    "run_worker_first": ["/", "/api/*", "/ws/*"]
   },
   // 通知の再送・リマインダー（10分ごと）
   "triggers": { "crons": ["*/10 * * * *"] },

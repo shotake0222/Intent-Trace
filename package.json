@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:lp": "tailwindcss -i web/lp/lp.src.css -o web/public/lp/lp.css --minify",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy -c dist/intent_trace/wrangler.json",
     "typecheck": "tsc -b",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.60.2",
+    "@tailwindcss/cli": "^4.3.3",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.3",
     "@types/react": "^19.3.0",

@@ -1,0 +1,10 @@
+@import "tailwindcss" source(none);
+@source "../public/lp";
+
+@theme {
+  --color-primary: #1e40af;
+  --color-secondary: #0ea5e9;
+  --color-accent: #10b981;
+  --color-dark: #0f172a;
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+}

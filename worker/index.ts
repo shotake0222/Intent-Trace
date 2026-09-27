@@ -55,6 +55,13 @@ app.get("/ws/sites/:siteId", async (c) => {
   return stub.fetch(c.req.raw);
 });
 
+// トップページ: 未ログインの訪問者にはサービス紹介（LP）、ログイン中はアプリを表示
+app.get("/", (c) => {
+  const cookie = c.req.header("cookie") ?? "";
+  const path = /(?:^|;\s*)it_session=/.test(cookie) ? "/" : "/lp/";
+  return c.env.ASSETS.fetch(new Request(new URL(path, c.req.url), c.req.raw));
+});
+
 app.notFound((c) => (c.req.path.startsWith("/api/") ? c.json({ error: "Not Found" }, 404) : c.env.ASSETS.fetch(c.req.raw)));
 
 app.onError((err, c) => {

@@ -107,6 +107,13 @@ flowchart LR
 
 **タグのQRコード**: 運営のラベルシートとテナント管理画面の「ラベル印刷（QR付き）」でQR入りラベルを印刷できます。QRは `/t/<ID>?src=qr` を指し、読み取りは「QR読取・証明レベル低」として記録されます（撮影で再現できるため）。テナントは「通知」設定でQR打刻を禁止できます。
 
+## サービス紹介ページ（LP）
+
+- `web/public/lp/`（`index.html`・`privacy.html`・`img/`）。未ログインで `/` を開くとLP、ログイン中はアプリを表示。`/lp/` は常にLP
+- スタイルは Tailwind をビルドした `web/public/lp/lp.css`（HTMLを編集したら `npm run build:lp`）
+- お問い合わせフォームは Formspree（`https://formspree.io/f/xppwyngv`）へ送信
+- 掲載価格は運営コンソール「料金プラン」と一致させること
+
 ## ローカル開発
 
 ```bash

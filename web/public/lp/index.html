@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Intent-Trace | 空間・設備・安全の統合マネジメント</title>
+  <meta name="description" content="NFCタグに「かざす」だけで巡回・点検・操作の確かな記録を残し、BLEで重機と人の接近を知らせる現場向けクラウドサービス。アプリ不要、月額9,800円から。" />
+  <meta property="og:title" content="Intent-Trace | かざす、が証拠になる。" />
+  <meta property="og:description" content="巡回・点検・安全管理をNFCとBLEでひとつに。アプリ不要、30日間無料トライアル。" />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/lp/lp.css" />
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 antialiased">
+
+  <!-- Header -->
+  <header class="fixed inset-x-0 top-0 z-50 bg-white/90 shadow-sm backdrop-blur-md">
+    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 md:h-20">
+      <a href="#top" class="flex items-center gap-2" aria-label="Intent-Trace トップへ">
+        <svg width="36" height="36" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+          <rect width="100" height="100" rx="20" fill="#1e40af" />
+          <path d="M70 30C77.5 38 77.5 52 70 60" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" />
+          <path d="M60 38C64.5 43.5 64.5 50.5 60 56" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" />
+          <path d="M50 46C51.5 48.5 51.5 51.5 50 54" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" />
+          <path d="M30 35L40 30L50 35V50C50 62 40 70 40 70C40 70 30 62 30 50V35Z" fill="#10b981" />
+        </svg>
+        <span class="text-xl font-bold tracking-tight text-dark md:text-2xl">Intent-<span class="text-primary">Trace</span></span>
+      </a>
+      <nav class="hidden items-center gap-6 lg:flex" aria-label="ページ内メニュー">
+        <a href="#service" class="font-medium text-gray-600 transition hover:text-primary">しくみ</a>
+        <a href="#features" class="font-medium text-gray-600 transition hover:text-primary">機能</a>
+        <a href="#plans" class="font-medium text-gray-600 transition hover:text-primary">導入プラン</a>
+        <a href="#pricing" class="font-medium text-gray-600 transition hover:text-primary">料金</a>
+        <a href="#faq" class="font-medium text-gray-600 transition hover:text-primary">よくある質問</a>
+      </nav>
+      <div class="flex items-center gap-3">
+        <a href="/login" class="hidden text-sm font-medium text-gray-600 hover:text-primary sm:inline">ログイン</a>
+        <a href="#contact" class="inline-flex items-center justify-center rounded-full bg-primary px-4 py-2 text-sm font-medium text-white shadow-lg transition hover:bg-blue-700 md:px-6 md:py-2.5">無料で相談する</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Hero -->
+    <section class="relative overflow-hidden pt-28 pb-16 lg:pt-40 lg:pb-28">
+      <div class="absolute inset-0 -z-10 bg-gradient-to-br from-dark via-primary to-secondary"></div>
+      <div class="absolute inset-0 -z-10 opacity-10" style="background-image: radial-gradient(#fff 1px, transparent 1px); background-size: 30px 30px"></div>
+      <div class="mx-auto grid max-w-7xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-5 lg:px-8">
+        <div class="text-center lg:col-span-3 lg:text-left">
+          <p class="mb-4 inline-block rounded-full bg-white/15 px-4 py-1 text-sm font-semibold text-white">空間・設備・安全の統合マネジメント</p>
+          <h1 class="mb-6 text-4xl font-extrabold leading-tight tracking-tight text-white md:text-5xl lg:text-6xl">かざす、が<br />証拠になる。</h1>
+          <p class="mx-auto mb-8 max-w-2xl text-lg text-blue-100 md:text-xl lg:mx-0">
+            現場に貼ったNFCタグにスマホをかざすだけで、巡回・点検・操作の記録が「その場にいた証拠」として残ります。重機と人の接近はBLEで検知して、その場で警報。紙の日報と目視確認に頼らない現場へ。
+          </p>
+          <div class="flex flex-col justify-center gap-4 sm:flex-row lg:justify-start">
+            <a href="#contact" class="rounded-full bg-white px-8 py-4 text-lg font-bold text-primary shadow-xl transition hover:bg-gray-50">30日間無料で試す</a>
+            <a href="#service" class="rounded-full border border-white px-8 py-4 text-lg font-bold text-white transition hover:bg-white/10">しくみを見る</a>
+          </div>
+          <ul class="mt-10 grid grid-cols-2 gap-3 text-sm text-white sm:grid-cols-4">
+            <li class="rounded-xl bg-white/10 px-3 py-3"><span class="block text-lg font-bold">アプリ不要</span>スマホのブラウザで動作</li>
+            <li class="rounded-xl bg-white/10 px-3 py-3"><span class="block text-lg font-bold">電源不要</span>タグはシールを貼るだけ</li>
+            <li class="rounded-xl bg-white/10 px-3 py-3"><span class="block text-lg font-bold">圏外でもOK</span>電波が戻れば自動送信</li>
+            <li class="rounded-xl bg-white/10 px-3 py-3"><span class="block text-lg font-bold">月額9,800円〜</span>初期費用0円</li>
+          </ul>
+        </div>
+        <div class="mx-auto w-64 lg:col-span-2 lg:w-72">
+          <div class="rounded-[2.5rem] border-8 border-dark bg-dark shadow-2xl">
+            <img src="/lp/img/tag.webp" width="585" height="850" alt="タグにかざした直後の画面。タッチの記録と設備カルテ、点検ボタンが表示されている" class="rounded-[2rem]" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Challenges -->
+    <section class="bg-white py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-16 text-center">
+          <h2 class="mb-4 text-3xl font-bold text-dark">現場管理の「3つの限界」を解決</h2>
+          <p class="text-gray-600">既存のシステムやアナログな運用では防げない課題に直面していませんか？</p>
+        </div>
+        <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
+          <div class="rounded-2xl border border-gray-100 bg-gray-50 p-8">
+            <div class="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-red-100 text-lg font-bold text-red-600">人</div>
+            <h3 class="mb-3 text-xl font-bold text-dark">動態管理と証跡の限界</h3>
+            <p class="mb-4 text-gray-600">手書き日報や自己申告では、記入漏れや事後記入を防げない。「本当にそこにいたか」を証明できない。</p>
+            <p class="text-sm font-semibold text-primary">→ タグへのタッチ時刻と場所を自動で記録。暗号タグなら撮影したURLでのなりすましも拒否。</p>
+          </div>
+          <div class="rounded-2xl border border-gray-100 bg-gray-50 p-8">
+            <div class="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-yellow-100 text-lg font-bold text-yellow-600">設備</div>
+            <h3 class="mb-3 text-xl font-bold text-dark">非効率とヒューマンエラー</h3>
+            <p class="mb-4 text-gray-600">似た機械の取り違えや紙マニュアルを探す手間。無資格者による誤操作や手順の飛ばし。</p>
+            <p class="text-sm font-semibold text-primary">→ かざした設備のカルテとマニュアルが即表示。資格がなければ操作許可を出さず、手順は順番通りにしか進めない。</p>
+          </div>
+          <div class="rounded-2xl border border-gray-100 bg-gray-50 p-8">
+            <div class="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100 text-lg font-bold text-orange-600">安全</div>
+            <h3 class="mb-3 text-xl font-bold text-dark">安全確保の高コスト化</h3>
+            <p class="mb-4 text-gray-600">重機との接触防止や全館へのビーコン設置は、機器と電池交換のコストが大きく現実的ではない。</p>
+            <p class="text-sm font-semibold text-primary">→ 場所の記録は電源不要のNFCタグで。電源が必要な機器は重機と作業員の携帯タグだけに絞ります。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Service diagram -->
+    <section id="service" class="bg-slate-50 py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-12 text-center">
+          <span class="text-sm font-bold uppercase tracking-wider text-secondary">How it works</span>
+          <h2 class="mt-2 text-3xl font-bold text-dark">サービス提供のしくみ</h2>
+          <p class="mx-auto mt-4 max-w-3xl text-gray-600">現場は「かざす」だけ。記録・判定・通知はクラウドが行い、管理者は画面と報告書で結果を受け取ります。タグの発行から設置、運用開始後のサポートまで当社がお手伝いします。</p>
+        </div>
+        <div class="rounded-3xl border border-gray-100 bg-white p-4 shadow-xl md:p-8">
+          <div class="overflow-x-auto"><svg viewBox="0 0 960 470" class="h-auto w-full min-w-[720px]" role="img" aria-labelledby="svc-title svc-desc">
+            <title id="svc-title">Intent-Trace のサービス提供図</title>
+            <desc id="svc-desc">現場の作業員がNFCタグにかざし、重機の接近センサーが警報を出す。記録はIntent-Traceクラウドサービスで判定され、管理者のダッシュボード、月次報告書、メールやLINEの通知に届く。合同会社Straidがタグの発行と導入支援、サポートを提供する。</desc>
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#64748b" /></marker>
+            </defs>
+            <!-- Columns -->
+            <rect x="10" y="40" width="270" height="330" rx="20" fill="#eff6ff" />
+            <text x="145" y="28" text-anchor="middle" font-size="18" font-weight="700" fill="#1e40af">① 現場</text>
+            <rect x="345" y="40" width="270" height="330" rx="20" fill="#1e40af" />
+            <text x="480" y="28" text-anchor="middle" font-size="18" font-weight="700" fill="#1e40af">② Intent-Trace</text>
+            <rect x="680" y="40" width="270" height="330" rx="20" fill="#ecfdf5" />
+            <text x="815" y="28" text-anchor="middle" font-size="18" font-weight="700" fill="#047857">③ 管理者・元請け</text>
+
+            <!-- Field items -->
+            <g>
+              <rect x="30" y="60" width="230" height="90" rx="14" fill="#fff" stroke="#bfdbfe" />
+              <text x="50" y="92" font-size="16" font-weight="700" fill="#0f172a">NFCタグ（電源不要）</text>
+              <text x="50" y="116" font-size="13" fill="#475569">設備・通路・出入口に貼るだけ</text>
+              <text x="50" y="136" font-size="13" fill="#475569">かざした瞬間が記録に</text>
+            </g>
+            <g>
+              <rect x="30" y="165" width="230" height="90" rx="14" fill="#fff" stroke="#bfdbfe" />
+              <text x="50" y="197" font-size="16" font-weight="700" fill="#0f172a">作業員のスマホ／社員証</text>
+              <text x="50" y="221" font-size="13" fill="#475569">アプリ不要・圏外でも保存</text>
+              <text x="50" y="241" font-size="13" fill="#475569">点検入力や写真もその場で</text>
+            </g>
+            <g>
+              <rect x="30" y="270" width="230" height="90" rx="14" fill="#fff" stroke="#fed7aa" />
+              <text x="50" y="302" font-size="16" font-weight="700" fill="#0f172a">重機の接近センサー</text>
+              <text x="50" y="326" font-size="13" fill="#475569">携帯タグとの距離を検知</text>
+              <text x="50" y="346" font-size="13" fill="#475569">警報はその場で即時に</text>
+            </g>
+
+            <!-- Cloud items -->
+            <text x="480" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#bfdbfe">クラウドサービス</text>
+            <g font-size="14" fill="#fff">
+              <rect x="370" y="98" width="220" height="50" rx="12" fill="#ffffff" fill-opacity="0.12" />
+              <text x="480" y="128" text-anchor="middle" font-weight="700">記録する（誰が・いつ・どこで）</text>
+              <rect x="370" y="160" width="220" height="50" rx="12" fill="#ffffff" fill-opacity="0.12" />
+              <text x="480" y="190" text-anchor="middle" font-weight="700">判定する（資格・手順・期限）</text>
+              <rect x="370" y="222" width="220" height="50" rx="12" fill="#ffffff" fill-opacity="0.12" />
+              <text x="480" y="252" text-anchor="middle" font-weight="700">見守る（生存確認・接近）</text>
+              <rect x="370" y="284" width="220" height="50" rx="12" fill="#ffffff" fill-opacity="0.12" />
+              <text x="480" y="314" text-anchor="middle" font-weight="700">知らせる（メール・LINE）</text>
+            </g>
+
+            <!-- Manager items -->
+            <g>
+              <rect x="700" y="60" width="230" height="90" rx="14" fill="#fff" stroke="#a7f3d0" />
+              <text x="720" y="92" font-size="16" font-weight="700" fill="#0f172a">リアルタイム画面</text>
+              <text x="720" y="116" font-size="13" fill="#475569">今どこで何が起きているか</text>
+              <text x="720" y="136" font-size="13" fill="#475569">未対応アラートを一覧で</text>
+            </g>
+            <g>
+              <rect x="700" y="165" width="230" height="90" rx="14" fill="#fff" stroke="#a7f3d0" />
+              <text x="720" y="197" font-size="16" font-weight="700" fill="#0f172a">分析と月次報告書</text>
+              <text x="720" y="221" font-size="13" fill="#475569">ヒヤリハットの多い場所・時間</text>
+              <text x="720" y="241" font-size="13" fill="#475569">PDF・CSVで提出</text>
+            </g>
+            <g>
+              <rect x="700" y="270" width="230" height="90" rx="14" fill="#fff" stroke="#a7f3d0" />
+              <text x="720" y="302" font-size="16" font-weight="700" fill="#0f172a">メール・LINE通知</text>
+              <text x="720" y="326" font-size="13" fill="#475569">異常や無応答をすぐ把握</text>
+              <text x="720" y="346" font-size="13" fill="#475569">現場のグループにも届く</text>
+            </g>
+
+            <!-- Arrows -->
+            <g stroke="#64748b" stroke-width="2.5" fill="none">
+              <path d="M262 105 C 300 105, 320 123, 366 123" marker-end="url(#ar)" />
+              <path d="M262 210 C 300 210, 320 185, 366 185" marker-end="url(#ar)" />
+              <path d="M262 315 C 300 315, 320 247, 366 247" marker-end="url(#ar)" stroke-dasharray="6 5" />
+              <path d="M594 123 C 640 123, 660 105, 696 105" marker-end="url(#ar)" />
+              <path d="M594 215 C 640 215, 660 210, 696 210" marker-end="url(#ar)" />
+              <path d="M594 309 C 640 309, 660 315, 696 315" marker-end="url(#ar)" />
+            </g>
+            <text x="313" y="388" text-anchor="middle" font-size="12" fill="#64748b">接近の記録は後から送信</text>
+
+            <!-- Support band -->
+            <rect x="10" y="395" width="940" height="64" rx="18" fill="#0f172a" />
+            <text x="480" y="424" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">導入・運用サポート（合同会社Straid）</text>
+            <text x="480" y="447" text-anchor="middle" font-size="13" fill="#cbd5e1">タグの発行・ラベル印刷・発送 ／ 設置と初期設定の支援 ／ 請求・問い合わせ対応 ／ 機能アップデート</text>
+          </svg></div>
+          <p class="mt-2 text-center text-xs text-gray-400 md:hidden">← 横にスクロールできます →</p>
+        </div>
+        <ol class="mt-10 grid gap-4 text-sm md:grid-cols-3">
+          <li class="rounded-2xl bg-white p-6 shadow-sm"><span class="mb-2 block text-2xl font-extrabold text-primary">1</span><b class="text-dark">現場でかざす</b><br />作業員はタグにスマホや社員証をかざすだけ。電波がなくても記録は端末に残り、後から自動で送られます。</li>
+          <li class="rounded-2xl bg-white p-6 shadow-sm"><span class="mb-2 block text-2xl font-extrabold text-primary">2</span><b class="text-dark">クラウドが判断</b><br />「巡回の通過」「点検の開始」「設備の使用許可」「生存確認への応答」など、状況に合わせて自動で意味づけします。</li>
+          <li class="rounded-2xl bg-white p-6 shadow-sm"><span class="mb-2 block text-2xl font-extrabold text-primary">3</span><b class="text-dark">管理者に届く</b><br />異常はメール・LINEで即通知。日々の記録は画面で確認し、月次報告書として元請けやオーナーへ提出できます。</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Core tech -->
+    <section class="bg-white py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-16 text-center">
+          <span class="text-sm font-bold uppercase tracking-wider text-secondary">Core Technology</span>
+          <h2 class="mt-2 text-3xl font-bold text-dark">NFC × BLE のハイブリッド安全管理</h2>
+        </div>
+        <div class="mb-20 flex flex-col items-center gap-12 md:flex-row">
+          <div class="flex-1">
+            <div class="mb-4 inline-block rounded-full bg-blue-100 px-4 py-1 text-sm font-bold text-primary">NFC仮想ビーコン</div>
+            <h3 class="mb-4 text-2xl font-bold text-dark">「意図」の証明と確かなロケーション</h3>
+            <p class="mb-6 leading-relaxed text-gray-600">電源不要でどこにでも貼れるNFCシールを現場に配置。数センチまで近づけて「意図的にかざす」動作を条件にすることで、離れた場所からの打刻を防ぎます。1枚のタグが、状況に応じて巡回の通過点・点検の入口・設備の操作許可（バーチャルキー）・単独作業の生存確認として働きます。</p>
+            <ul class="space-y-2 text-sm text-gray-600">
+              <li>● 暗号タグ（NTAG 424 DNA）はタッチのたびに使い捨ての署名を発行。撮影したURLの再利用を拒否します</li>
+              <li>● 記録ごとに「証明レベル（高・中・低）」を残し、監査で根拠を示せます</li>
+              <li>● NFC非対応の端末向けにQRコードも併記（証明レベル低として区別）</li>
+            </ul>
+          </div>
+          <div class="flex-1">
+            <img src="/lp/img/labels.webp" width="1200" height="341" loading="lazy" alt="QRコード付きのタグ用ラベル。設備名、設置場所、登録コードが印刷されている" class="rounded-2xl border border-gray-100 shadow-xl" />
+            <p class="mt-3 text-center text-xs text-gray-500">管理画面から印刷できるタグ用ラベル（QRコード付き）</p>
+          </div>
+        </div>
+        <div class="flex flex-col items-center gap-12 md:flex-row-reverse">
+          <div class="flex-1">
+            <div class="mb-4 inline-block rounded-full bg-emerald-100 px-4 py-1 text-sm font-bold text-accent">BLE接近検知</div>
+            <h3 class="mb-4 text-2xl font-bold text-dark">「空間」の動的なハザードを感知</h3>
+            <p class="mb-6 leading-relaxed text-gray-600">作業員が携帯する小型BLEタグの電波を、フォークリフトなど重機側の受信機が検知。危険距離まで近づいた瞬間に、通信を待たずその場で警報を鳴らします。検知の記録は後からクラウドへ送られ、どの重機・どの時間帯・どの作業員でヒヤリハットが多いかを分析できます。</p>
+            <ul class="space-y-2 text-sm text-gray-600">
+              <li>● 通信が途切れても警報は止まりません</li>
+              <li>● 無資格者の運転席タッチや起動を検知して管理者へ通知</li>
+              <li>● 車両の減速・停止との連動は、安全評価を経て順次対応予定です</li>
+            </ul>
+          </div>
+          <div class="flex-1">
+            <img src="/lp/img/analytics.webp" width="1200" height="635" loading="lazy" alt="曜日と時間帯ごとのヒヤリハット発生件数、作業員別・重機別の接近検知件数、点検所要時間を示す分析画面" class="rounded-2xl border border-gray-100 shadow-xl" />
+            <p class="mt-3 text-center text-xs text-gray-500">ヒヤリハットの発生傾向と重機別の接近検知</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features grid -->
+    <section id="features" class="bg-slate-50 py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-12 text-center">
+          <span class="text-sm font-bold uppercase tracking-wider text-secondary">Features</span>
+          <h2 class="mt-2 text-3xl font-bold text-dark">現場の「確認」をまるごとデジタルに</h2>
+          <p class="mt-4 text-gray-600">すべての機能を1つのサービスで。必要なものから使い始められます。</p>
+        </div>
+        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">巡回ルート</h3><p class="text-sm text-gray-600">地点タグを順にかざして巡回を記録。順番の強制、目安時間、未通過地点の確認ができます。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">設備カルテと点検</h3><p class="text-sm text-gray-600">かざすと型式・点検履歴・マニュアルPDFを表示。チェック項目と写真で点検を記録し、期限切れを知らせます。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">バーチャルキー</h3><p class="text-sm text-gray-600">有効な資格を持つ人だけに設備の使用を許可。使用中の人がいれば重複を防ぎ、無資格の操作は管理者に通知。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">手順インターロック</h3><p class="text-sm text-gray-600">「電源遮断 → 検電 → 作業開始」のように、決められた順番でタグをかざさないと次に進めません。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">単独作業の生存確認</h3><p class="text-sm text-gray-600">一人作業の間、一定間隔でタグにかざして応答。応答がなければ管理者へ自動でアラートを送ります。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">ヒヤリハット報告</h3><p class="text-sm text-gray-600">スマホから内容と写真をその場で報告。重大度に応じてダッシュボードと通知に即反映されます。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">リアルタイムダッシュボード</h3><p class="text-sm text-gray-600">現場のタッチ、未対応アラート、単独作業者の残り時間、設備の使用状況をリアルタイムに表示。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">分析・ヒートマップ</h3><p class="text-sm text-gray-600">ゾーン別・曜日×時間帯・作業員別・重機別にヒヤリハットと動線を可視化。点検の所要時間も分析します。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">月次報告書・CSV</h3><p class="text-sm text-gray-600">元請け・ビルオーナー向けの月次報告書を自動作成。印刷・PDF保存、記録のCSV出力にも対応。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">メール・LINE通知</h3><p class="text-sm text-gray-600">生存確認の無応答、接近、無資格操作、点検異常をメールと現場のLINEグループへ。宛先と種類を選べます。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">オフライン対応</h3><p class="text-sm text-gray-600">地下や機械室など圏外でも記録を端末に保存し、電波が戻ると自動で送信します。</p></div>
+          <div class="rounded-2xl bg-white p-6 shadow-sm"><h3 class="mb-2 font-bold text-dark">タグの登録・交換がかんたん</h3><p class="text-sm text-gray-600">届いたタグは貼った場所でかざして登録。破損時は新しいタグに交換するだけで巡回・手順の設定を引き継ぎます。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screens -->
+    <section class="bg-white py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-12 text-center">
+          <h2 class="text-3xl font-bold text-dark">現場と管理者、それぞれに最適な画面</h2>
+        </div>
+        <div class="grid items-start gap-10 lg:grid-cols-3">
+          <figure class="mx-auto w-64">
+            <div class="rounded-[2.5rem] border-8 border-dark bg-dark shadow-2xl"><img src="/lp/img/inspect.webp" width="585" height="870" loading="lazy" alt="点検項目ごとに良・否を選び、総合判定と所見を入力する点検記録画面" class="rounded-[2rem]" /></div>
+            <figcaption class="mt-4 text-center text-sm text-gray-600">作業員：大きなボタンで迷わない点検入力</figcaption>
+          </figure>
+          <figure class="lg:col-span-2">
+            <img src="/lp/img/dashboard.webp" width="1200" height="400" loading="lazy" alt="タッチ件数、稼働作業員、点検、巡回完了、ヒヤリハット、未対応アラートの件数と日別グラフ、単独作業者の残り時間を示すダッシュボード" class="rounded-2xl border border-gray-100 shadow-xl" />
+            <figcaption class="mt-4 text-center text-sm text-gray-600">管理者：現場の今と、対応すべきことがひと目でわかる</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- Plans -->
+    <section id="plans" class="bg-slate-50 py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-16 text-center">
+          <h2 class="mb-4 text-3xl font-bold text-dark">選べる2つの導入アプローチ</h2>
+          <p class="text-gray-600">現場のITリテラシーやセキュリティ要件（防爆・スマホ持ち込み制限）に合わせて選べます。組み合わせての利用も可能です。</p>
+        </div>
+        <div class="mx-auto grid max-w-5xl grid-cols-1 gap-8 md:grid-cols-2">
+          <div class="rounded-3xl border-2 border-gray-100 bg-white p-8 transition duration-300 hover:border-primary">
+            <h3 class="mb-2 text-2xl font-bold text-dark">A. スマホ版</h3>
+            <p class="mb-6 font-semibold text-secondary">ローコスト＆多機能モデル</p>
+            <ul class="mb-8 space-y-4 text-gray-600">
+              <li class="flex items-start gap-2"><svg class="h-6 w-6 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>作業員の私物・貸与スマホ ＋ 現場のNFCシール</li>
+              <li class="flex items-start gap-2"><svg class="h-6 w-6 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>アプリのインストール不要。iPhone・Androidに対応</li>
+              <li class="flex items-start gap-2"><svg class="h-6 w-6 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>マニュアル表示、写真付き点検、ヒヤリハット報告まで</li>
+            </ul>
+            <div class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">おすすめ：ビルメンテナンス、清掃、警備巡回、物流倉庫</div>
+          </div>
+          <div class="rounded-3xl border-2 border-gray-100 bg-white p-8 transition duration-300 hover:border-primary">
+            <h3 class="mb-2 text-2xl font-bold text-dark">B. ハードウェア版</h3>
+            <p class="mb-6 font-semibold text-secondary">高耐久＆教育レスモデル</p>
+            <ul class="mb-8 space-y-4 text-gray-600">
+              <li class="flex items-start gap-2"><svg class="h-6 w-6 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>ICカード社員証 ＋ 現場の固定リーダー</li>
+              <li class="flex items-start gap-2"><svg class="h-6 w-6 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>かざすだけ。画面操作がなく教育コストがほぼ不要</li>
+              <li class="flex items-start gap-2"><svg class="h-6 w-6 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>「スマホ持ち込み禁止」の現場にも対応</li>
+            </ul>
+            <div class="rounded-lg bg-gray-50 p-4 text-sm text-gray-500">おすすめ：化学プラント、大規模工場、防爆エリア（機器構成は個別にご提案）</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="bg-white py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-12 text-center">
+          <h2 class="mb-4 text-3xl font-bold text-dark">ご利用料金</h2>
+          <p class="text-gray-600">初期費用0円。月額のシステム利用料と、必要な分だけのタグ購入でご利用いただけます。</p>
+        </div>
+        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div class="flex flex-col rounded-3xl border border-gray-200 p-8">
+            <h3 class="text-lg font-bold text-dark">フリートライアル</h3>
+            <p class="mt-4 text-4xl font-extrabold text-dark">¥0</p>
+            <p class="text-sm text-gray-500">30日間</p>
+            <ul class="mt-6 flex-1 space-y-2 text-sm text-gray-600">
+              <li>タグ30枚・ユーザー10名・1現場</li>
+              <li>巡回・点検・手順・生存確認</li>
+              <li>ダッシュボード・月次報告書</li>
+              <li>自動で有料に切り替わりません</li>
+            </ul>
+            <a href="#contact" class="mt-8 rounded-full border border-primary py-3 text-center font-bold text-primary hover:bg-blue-50">試してみる</a>
+          </div>
+          <div class="flex flex-col rounded-3xl border border-gray-200 p-8">
+            <h3 class="text-lg font-bold text-dark">スタンダード</h3>
+            <p class="mt-4 text-4xl font-extrabold text-dark">¥9,800<span class="text-base font-medium text-gray-500">/月</span></p>
+            <p class="text-sm text-gray-500">税抜・最大5現場</p>
+            <ul class="mt-6 flex-1 space-y-2 text-sm text-gray-600">
+              <li>タグ50枚・ユーザー10名を含む</li>
+              <li>追加 タグ¥50／枚・ユーザー¥300／名（月額）</li>
+              <li>トライアルの全機能</li>
+              <li>BLE接近検知・固定リーダー連携</li>
+              <li>メール・LINE通知</li>
+            </ul>
+            <a href="#contact" class="mt-8 rounded-full bg-primary py-3 text-center font-bold text-white hover:bg-blue-700">相談する</a>
+          </div>
+          <div class="relative flex flex-col rounded-3xl border-2 border-primary p-8 shadow-xl">
+            <span class="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-bold text-white">おすすめ</span>
+            <h3 class="text-lg font-bold text-dark">プロ</h3>
+            <p class="mt-4 text-4xl font-extrabold text-dark">¥29,800<span class="text-base font-medium text-gray-500">/月</span></p>
+            <p class="text-sm text-gray-500">税抜・現場数無制限</p>
+            <ul class="mt-6 flex-1 space-y-2 text-sm text-gray-600">
+              <li>タグ200枚・ユーザー30名を含む</li>
+              <li>追加 タグ¥40／枚・ユーザー¥250／名（月額）</li>
+              <li>スタンダードの全機能</li>
+              <li>分析・ヒートマップ・点検所要時間</li>
+              <li>暗号タグの鍵を自社で登録</li>
+            </ul>
+            <a href="#contact" class="mt-8 rounded-full bg-primary py-3 text-center font-bold text-white hover:bg-blue-700">相談する</a>
+          </div>
+          <div class="flex flex-col rounded-3xl border border-gray-200 bg-dark p-8 text-white">
+            <h3 class="text-lg font-bold">エンタープライズ</h3>
+            <p class="mt-4 text-4xl font-extrabold">個別見積もり</p>
+            <p class="text-sm text-gray-400">多拠点・大規模向け</p>
+            <ul class="mt-6 flex-1 space-y-2 text-sm text-gray-300">
+              <li>タグ・ユーザー上限の個別設定</li>
+              <li>ハードウェア版（固定リーダー・社員証）</li>
+              <li>重機への受信機設置</li>
+              <li>導入・運用の専任サポート</li>
+            </ul>
+            <a href="#contact" class="mt-8 rounded-full bg-white py-3 text-center font-bold text-dark hover:bg-gray-100">問い合わせる</a>
+          </div>
+        </div>
+        <div class="mt-12 overflow-x-auto rounded-2xl border border-gray-200">
+          <table class="w-full min-w-[560px] text-left text-sm">
+            <caption class="bg-gray-50 px-6 py-3 text-left font-bold text-dark">タグ・オプション（税抜）</caption>
+            <tbody class="divide-y divide-gray-100">
+              <tr><th class="px-6 py-3 font-medium text-dark">標準NFCタグ（ラベル印刷・書き込み済み）</th><td class="px-6 py-3">1枚 ¥300〜（買い切り）</td></tr>
+              <tr><th class="px-6 py-3 font-medium text-dark">暗号NFCタグ（なりすまし防止）</th><td class="px-6 py-3">1枚 ¥900〜（買い切り）</td></tr>
+              <tr><th class="px-6 py-3 font-medium text-dark">現地設置・初期設定の代行</th><td class="px-6 py-3">¥50,000〜</td></tr>
+              <tr><th class="px-6 py-3 font-medium text-dark">重機の接近センサー・携帯タグ、固定リーダー</th><td class="px-6 py-3">台数・現場環境に応じてお見積り</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="mt-4 text-xs text-gray-500">※ 表示価格はすべて税抜です。月額料金は毎月の請求書作成時点で稼働しているタグ・ユーザー数で計算し、請求書をメールでお送りします。金属面用タグなど特殊なタグは別途お見積りします。</p>
+      </div>
+    </section>
+
+    <!-- Flow -->
+    <section class="bg-slate-50 py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h2 class="mb-12 text-center text-3xl font-bold text-dark">導入の流れ</h2>
+        <ol class="grid gap-4 md:grid-cols-5">
+          <li class="rounded-2xl bg-white p-6 shadow-sm"><span class="text-sm font-bold text-secondary">STEP 1</span><h3 class="mt-1 font-bold text-dark">ご相談</h3><p class="mt-2 text-sm text-gray-600">現場の課題と、記録したい場所・設備を伺います。</p></li>
+          <li class="rounded-2xl bg-white p-6 shadow-sm"><span class="text-sm font-bold text-secondary">STEP 2</span><h3 class="mt-1 font-bold text-dark">トライアル開始</h3><p class="mt-2 text-sm text-gray-600">管理画面をご用意し、試用タグをお送りします。</p></li>
+          <li class="rounded-2xl bg-white p-6 shadow-sm"><span class="text-sm font-bold text-secondary">STEP 3</span><h3 class="mt-1 font-bold text-dark">貼ってかざして登録</h3><p class="mt-2 text-sm text-gray-600">タグを貼り、スマホでかざして場所と設備を登録します。</p></li>
+          <li class="rounded-2xl bg-white p-6 shadow-sm"><span class="text-sm font-bold text-secondary">STEP 4</span><h3 class="mt-1 font-bold text-dark">現場で運用</h3><p class="mt-2 text-sm text-gray-600">作業員に会社コードとPINを配布すればすぐ使えます。</p></li>
+          <li class="rounded-2xl bg-white p-6 shadow-sm"><span class="text-sm font-bold text-secondary">STEP 5</span><h3 class="mt-1 font-bold text-dark">本契約・拡大</h3><p class="mt-2 text-sm text-gray-600">効果を確認してからプランを選び、現場を広げます。</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Security -->
+    <section class="bg-white py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h2 class="mb-12 text-center text-3xl font-bold text-dark">安心して使っていただくために</h2>
+        <div class="grid gap-6 md:grid-cols-3">
+          <div class="rounded-2xl border border-gray-100 p-6"><h3 class="mb-2 font-bold text-dark">常時追跡しません</h3><p class="text-sm text-gray-600">位置が記録されるのは、作業員が自らタグにかざした時と、重機に近づいた時だけ。GPSで常に居場所を追うことはありません。</p></div>
+          <div class="rounded-2xl border border-gray-100 p-6"><h3 class="mb-2 font-bold text-dark">改ざんしにくい記録</h3><p class="text-sm text-gray-600">記録はクラウドに保存され、変更の操作は監査ログに残ります。暗号タグは使い捨ての署名でなりすましを防ぎます。</p></div>
+          <div class="rounded-2xl border border-gray-100 p-6"><h3 class="mb-2 font-bold text-dark">権限と通信の保護</h3><p class="text-sm text-gray-600">通信はすべて暗号化。作業員・マネージャー・管理者の権限を分け、運営側のログインには二段階認証を必須にしています。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="bg-slate-50 py-20">
+      <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <h2 class="mb-10 text-center text-3xl font-bold text-dark">よくある質問</h2>
+        <div class="space-y-3">
+          <details class="rounded-2xl bg-white p-6 shadow-sm"><summary class="cursor-pointer font-bold text-dark">専用アプリのインストールは必要ですか？</summary><p class="mt-3 text-sm text-gray-600">不要です。タグにかざすとスマホのブラウザで画面が開きます。ホーム画面に追加すればアプリのように使えます。</p></details>
+          <details class="rounded-2xl bg-white p-6 shadow-sm"><summary class="cursor-pointer font-bold text-dark">iPhoneでも使えますか？</summary><p class="mt-3 text-sm text-gray-600">使えます。iPhoneは画面を点けた状態で本体上部をタグに近づけ、表示された通知をタップします。Androidは本体背面をかざします。NFC非対応の端末はラベルのQRコードでも記録できます。</p></details>
+          <details class="rounded-2xl bg-white p-6 shadow-sm"><summary class="cursor-pointer font-bold text-dark">電波が届かない地下や機械室でも記録できますか？</summary><p class="mt-3 text-sm text-gray-600">できます。記録は端末に一時保存され、電波が戻ると自動で送信されます（保存から7日以内）。</p></details>
+          <details class="rounded-2xl bg-white p-6 shadow-sm"><summary class="cursor-pointer font-bold text-dark">タグの電池交換は必要ですか？</summary><p class="mt-3 text-sm text-gray-600">NFCタグは電池を使いません。電池が必要なのは、接近検知を使う場合の作業員の携帯タグと重機側の受信機だけです。</p></details>
+          <details class="rounded-2xl bg-white p-6 shadow-sm"><summary class="cursor-pointer font-bold text-dark">タグをはがされたり、写真を撮られて不正に打刻されませんか？</summary><p class="mt-3 text-sm text-gray-600">暗号タグはタッチのたびに使い捨ての署名を出すため、撮影したURLでは記録できません。標準タグやQRコードでの記録は「証明レベル低」として区別され、QRでの記録を禁止する設定もあります。</p></details>
+          <details class="rounded-2xl bg-white p-6 shadow-sm"><summary class="cursor-pointer font-bold text-dark">タグが壊れたらどうなりますか？</summary><p class="mt-3 text-sm text-gray-600">新しいタグを貼り、管理画面で「交換」するだけです。巡回ルートや作業手順の設定は自動で引き継がれます。</p></details>
+          <details class="rounded-2xl bg-white p-6 shadow-sm"><summary class="cursor-pointer font-bold text-dark">重機を自動で止めることはできますか？</summary><p class="mt-3 text-sm text-gray-600">現在は、接近時に重機側で警報を鳴らし、記録と通知を行います。車両の減速・停止との連動は、機能安全の評価を経て対応を進めています。</p></details>
+          <details class="rounded-2xl bg-white p-6 shadow-sm"><summary class="cursor-pointer font-bold text-dark">支払い方法と契約期間は？</summary><p class="mt-3 text-sm text-gray-600">月額制で、毎月請求書をお送りします（銀行振込）。最低契約期間はなく、トライアル終了後に自動で課金されることもありません。</p></details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contact -->
+    <section id="contact" class="bg-white py-20">
+      <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-12 text-center">
+          <h2 class="mb-4 text-3xl font-bold text-dark">お問い合わせ・無料トライアル</h2>
+          <p class="text-gray-600">導入のご相談、トライアルのお申し込み、お見積りなどお気軽にお問い合わせください。2営業日以内にご連絡します。</p>
+        </div>
+        <form action="https://formspree.io/f/xppwyngv" method="POST" class="rounded-3xl border border-gray-200 bg-gray-50 p-8 md:p-10">
+          <input type="hidden" name="_subject" value="【Intent-Trace LP】お問い合わせ" />
+          <input type="text" name="_gotcha" class="hidden" tabindex="-1" autocomplete="off" aria-hidden="true" />
+          <div class="grid gap-6 md:grid-cols-2">
+            <div>
+              <label for="company" class="mb-2 block text-sm font-medium text-gray-700">貴社名</label>
+              <input type="text" name="company" id="company" autocomplete="organization" class="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary" placeholder="株式会社〇〇" />
+            </div>
+            <div>
+              <label for="name" class="mb-2 block text-sm font-medium text-gray-700">お名前 <span class="text-red-500">*</span></label>
+              <input type="text" name="name" id="name" required autocomplete="name" class="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary" placeholder="山田 太郎" />
+            </div>
+            <div>
+              <label for="email" class="mb-2 block text-sm font-medium text-gray-700">メールアドレス <span class="text-red-500">*</span></label>
+              <input type="email" name="email" id="email" required autocomplete="email" class="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary" placeholder="info@example.com" />
+            </div>
+            <div>
+              <label for="tel" class="mb-2 block text-sm font-medium text-gray-700">電話番号</label>
+              <input type="tel" name="tel" id="tel" autocomplete="tel" class="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary" placeholder="03-0000-0000" />
+            </div>
+            <div>
+              <label for="industry" class="mb-2 block text-sm font-medium text-gray-700">業種</label>
+              <select name="industry" id="industry" class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary">
+                <option value="">選択してください</option>
+                <option>ビルメンテナンス・設備管理</option>
+                <option>警備</option>
+                <option>物流・倉庫</option>
+                <option>製造・工場・プラント</option>
+                <option>建設</option>
+                <option>その他</option>
+              </select>
+            </div>
+            <div>
+              <label for="topic" class="mb-2 block text-sm font-medium text-gray-700">ご用件</label>
+              <select name="topic" id="topic" class="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary">
+                <option>無料トライアルの申し込み</option>
+                <option>資料請求・お見積り</option>
+                <option>導入のご相談</option>
+                <option>その他</option>
+              </select>
+            </div>
+          </div>
+          <div class="mt-6">
+            <label for="message" class="mb-2 block text-sm font-medium text-gray-700">お問い合わせ内容 <span class="text-red-500">*</span></label>
+            <textarea name="message" id="message" rows="5" required class="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary" placeholder="現場の規模（設備数・作業員数）や課題をご記入ください。"></textarea>
+          </div>
+          <label class="mt-6 flex items-start gap-2 text-sm text-gray-600">
+            <input type="checkbox" name="privacy_agree" value="yes" required class="mt-1" />
+            <span><a href="/lp/privacy" class="text-primary underline" target="_blank" rel="noopener">プライバシーポリシー</a>に同意します <span class="text-red-500">*</span></span>
+          </label>
+          <button type="submit" class="mt-8 w-full rounded-lg bg-dark px-6 py-4 text-lg font-bold text-white shadow-lg transition hover:bg-gray-800">送信する</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bg-dark py-12 text-gray-400">
+    <div class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 px-4 sm:px-6 md:flex-row lg:px-8">
+      <div class="flex items-center gap-2">
+        <svg width="24" height="24" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+          <rect width="100" height="100" rx="20" fill="#1e40af" />
+          <path d="M70 30C77.5 38 77.5 52 70 60" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" />
+          <path d="M60 38C64.5 43.5 64.5 50.5 60 56" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" />
+          <path d="M50 46C51.5 48.5 51.5 51.5 50 54" stroke="#0ea5e9" stroke-width="6" stroke-linecap="round" />
+          <path d="M30 35L40 30L50 35V50C50 62 40 70 40 70C40 70 30 62 30 50V35Z" fill="#10b981" />
+        </svg>
+        <span class="text-xl font-bold text-white">Intent-Trace</span>
+      </div>
+      <nav class="flex flex-wrap justify-center gap-6 text-sm" aria-label="フッター">
+        <a href="/lp/privacy" class="hover:text-white">プライバシーポリシー</a>
+        <a href="#contact" class="hover:text-white">お問い合わせ</a>
+        <a href="/login" class="hover:text-white">ログイン</a>
+      </nav>
+      <p class="text-sm">&copy; 2026 合同会社Straid</p>
+    </div>
+  </footer>
+</body>
+</html>

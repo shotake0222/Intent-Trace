@@ -37,8 +37,9 @@ export default defineConfig({
         clientsClaim: true,
         cleanupOutdatedCaches: true,
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//, /^\/ws\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/ws\//, /^\/lp(\/|$)/],
         globPatterns: ["**/*.{js,css,html,png,svg,webmanifest}"],
+        globIgnores: ["lp/**"],
         runtimeCaching: [
           {
             // 設備カルテ・マスタは地下室等でも参照できるよう NetworkFirst でキャッシュ
