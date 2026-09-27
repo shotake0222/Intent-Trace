@@ -115,3 +115,27 @@ export async function assertSiteInOrg(env: Env, siteId: string, orgId: string) {
   const s = await env.DB.prepare("SELECT id FROM sites WHERE id = ? AND org_id = ?").bind(siteId, orgId).first();
   if (!s) fail(404, "現場が見つかりません");
 }
+
+const OWNED_SQL = {
+  equipment: ["SELECT 1 FROM equipment WHERE id = ? AND org_id = ?", "設備"],
+  zone: ["SELECT 1 FROM zones z JOIN sites s ON s.id = z.site_id WHERE z.id = ? AND s.org_id = ?", "ゾーン"],
+  qualification: ["SELECT 1 FROM qualifications WHERE id = ? AND org_id = ?", "資格"],
+  tag: ["SELECT 1 FROM tags WHERE id = ? AND org_id = ?", "タグ"],
+  document: ["SELECT 1 FROM documents WHERE id = ? AND org_id = ?", "ファイル"],
+  site: ["SELECT 1 FROM sites WHERE id = ? AND org_id = ?", "現場"]
+} as const;
+
+/**
+ * リクエストで渡された参照ID（設備・ゾーン・資格など）が呼び出し元の組織のものか検証する。
+ * 他テナントのIDを紐付けられないようにするため、INSERT/UPDATE の前に必ず通す。
+ */
+export async function assertOwned(env: Env, kind: keyof typeof OWNED_SQL, id: string | null | undefined, orgId: string) {
+  if (id === null || id === undefined || id === "") return;
+  const [sql, label] = OWNED_SQL[kind];
+  const row = await env.DB.prepare(sql).bind(id, orgId).first();
+  if (!row) fail(404, `${label}が見つかりません`);
+}
+
+export async function assertOwnedAll(env: Env, kind: keyof typeof OWNED_SQL, ids: (string | null | undefined)[] | undefined, orgId: string) {
+  for (const id of ids ?? []) await assertOwned(env, kind, id, orgId);
+}

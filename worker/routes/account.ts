@@ -4,10 +4,17 @@ import { createRouter, body, fail, newId, now, audit } from "../lib/app";
 import { requireAuth, requireRole } from "../lib/auth";
 import { getContract, usage, computeInvoice, getSettings } from "../lib/platform";
 import { renderInvoice } from "../lib/invoice";
-import { getOrgPrefs, getNotifyConfig, notify, emailTemplate, sixDigitCode, type Message } from "../lib/notify";
+import { TERMS_VERSION } from "../../shared/types";
+import { getOrgPrefs, getNotifyConfig, notify, emailTemplate, type Message } from "../lib/notify";
 
 const r = createRouter();
 r.use("*", requireAuth);
+
+const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function linkCode() {
+  const b = crypto.getRandomValues(new Uint8Array(8));
+  return "IT-" + Array.from(b, (x) => CODE_CHARS[x % CODE_CHARS.length]).join("");
+}
 
 // お知らせは全ロールに表示（作業員アプリにも出せるように）
 r.get("/announcements", async (c) => {
@@ -39,6 +46,17 @@ r.get("/contract", async (c) => {
     "SELECT code, name, monthly_fee, fee_per_tag, fee_per_user, included_tags, included_users, max_tags, max_users, max_sites, features_json FROM plans WHERE active = 1 AND code != 'trial' ORDER BY sort"
   ).all();
   return c.json({ org, contract, usage: use, estimate, plans, support: { email: settings.support_email ?? "", company: settings.company_name ?? "" } });
+});
+
+/** 利用規約への同意（組織として管理者が同意。版が変わると再同意が必要） */
+r.post("/terms/accept", requireRole("admin"), async (c) => {
+  const u = c.get("user");
+  if (u.impersonatedBy) fail(403, "代理ログイン中は利用規約に同意できません");
+  const b = await body(c, z.object({ version: z.string() }));
+  if (b.version !== TERMS_VERSION) fail(409, "利用規約が更新されています。画面を再読み込みしてください");
+  await c.env.DB.prepare("UPDATE organizations SET terms_version = ?, terms_accepted_at = ?, terms_accepted_by = ? WHERE id = ?").bind(TERMS_VERSION, now(), u.id, u.orgId).run();
+  await audit(c.env, u.orgId, u.id, "terms.accept", "organization", u.orgId, { version: TERMS_VERSION });
+  return c.json({ ok: true });
 });
 
 r.patch("/org", requireRole("admin"), async (c) => {
@@ -134,15 +152,16 @@ r.put("/notifications", requireRole("admin"), async (c) => {
   return c.json({ ok: true });
 });
 
-/** LINE 連携コード発行: 公式アカウントを友だち追加（またはグループに招待）してこの6桁を送信 */
+/** LINE 連携コード発行: 公式アカウントを友だち追加（またはグループに招待）してこの連携コードを送信 */
 r.post("/line/link-code", async (c) => {
   const u = c.get("user");
   const b = await body(c, z.object({ personal: z.boolean().default(false) }));
   const cfg = await getNotifyConfig(c.env);
   if (!cfg.lineToken) fail(400, "LINE連携は運営側でまだ設定されていません");
-  const code = sixDigitCode();
+  // 推測されにくい連携コード（IT- + 8文字、約1兆通り）。他テナントのコードを上書きしないよう INSERT のみ
+  const code = linkCode();
   await c.env.DB.prepare("DELETE FROM line_link_codes WHERE expires_at < ?").bind(now()).run();
-  await c.env.DB.prepare("INSERT OR REPLACE INTO line_link_codes (code, org_id, user_id, created_by, expires_at) VALUES (?,?,?,?,?)")
+  await c.env.DB.prepare("INSERT INTO line_link_codes (code, org_id, user_id, created_by, expires_at) VALUES (?,?,?,?,?)")
     .bind(code, u.orgId, b.personal ? u.id : null, u.id, now() + 15 * 60_000)
     .run();
   return c.json({ code, expiresAt: now() + 15 * 60_000, addFriendUrl: cfg.lineBasicId ? `https://line.me/R/ti/p/@${encodeURIComponent(cfg.lineBasicId.replace(/^@/, ""))}` : null });

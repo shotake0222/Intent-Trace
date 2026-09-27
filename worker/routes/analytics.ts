@@ -84,9 +84,9 @@ r.get("/heatmap", async (c) => {
   const { from, to, siteId } = params(c);
   const { results: zoneRows } = await c.env.DB.prepare(
     `SELECT z.id, z.name, z.floor, z.pos_x, z.pos_y,
-            (SELECT COUNT(*) FROM incidents i WHERE i.zone_id=z.id AND i.occurred_at BETWEEN ?2 AND ?3) incidents,
-            (SELECT COUNT(*) FROM incidents i WHERE i.zone_id=z.id AND i.severity='danger' AND i.occurred_at BETWEEN ?2 AND ?3) danger,
-            (SELECT COUNT(*) FROM tap_events t WHERE t.zone_id=z.id AND t.occurred_at BETWEEN ?2 AND ?3) taps
+            (SELECT COUNT(*) FROM incidents i WHERE i.zone_id=z.id AND i.org_id=?1 AND i.occurred_at BETWEEN ?2 AND ?3) incidents,
+            (SELECT COUNT(*) FROM incidents i WHERE i.zone_id=z.id AND i.org_id=?1 AND i.severity='danger' AND i.occurred_at BETWEEN ?2 AND ?3) danger,
+            (SELECT COUNT(*) FROM tap_events t WHERE t.zone_id=z.id AND t.org_id=?1 AND t.occurred_at BETWEEN ?2 AND ?3) taps
        FROM zones z JOIN sites s ON s.id=z.site_id WHERE s.org_id=?1 AND (?4 IS NULL OR z.site_id=?4) ORDER BY z.floor, z.name`
   )
     .bind(u.orgId, from, to, siteId)

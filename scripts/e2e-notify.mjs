@@ -71,7 +71,7 @@ check("請求書の再送", again.recipients >= 1, again);
 
 console.log("LINE 連携（webhook）");
 const lc = await t.post("/api/account/line/link-code", { personal: false });
-check("連携コード発行・友だち追加URL", /^\d{6}$/.test(lc.code) && lc.addFriendUrl?.includes("@123abcd"), lc);
+check("連携コード発行・友だち追加URL", /^IT-[A-Z2-9]{8}$/.test(lc.code) && lc.addFriendUrl?.includes("@123abcd"), lc);
 const hook = async (payload, secret = "line-secret-xyz") => {
   const raw = JSON.stringify(payload);
   const sig = createHmac("sha256", secret).update(raw).digest("base64");

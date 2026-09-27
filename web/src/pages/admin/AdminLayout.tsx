@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useOutletContext } from "react-router";
 import { useAuth } from "../../lib/auth";
 import { useApi } from "../../lib/hooks";
-import { Select, cx } from "../../components/ui";
+import { Alert, Button, Select, cx } from "../../components/ui";
+import { post, ApiError } from "../../lib/api";
+import { TERMS_VERSION } from "../../../../shared/types";
 
 export interface Site {
   id: string;
@@ -122,6 +124,7 @@ export default function AdminLayout() {
           </Link>
         )}
         <Announcements />
+        <TermsGate />
         <main className="mx-auto max-w-7xl p-4 lg:p-8">{siteId ? <Outlet context={ctx} /> : null}</main>
       </div>
     </div>
@@ -164,6 +167,54 @@ function Announcements() {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** 管理者が現行の利用規約に同意するまで操作をブロックする（マネージャーには案内のみ） */
+function TermsGate() {
+  const { me, refresh } = useAuth();
+  const [agree, setAgree] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!me || me.termsAccepted || me.impersonatedBy) return null;
+  if (me.role !== "admin")
+    return <div className="bg-slate-100 px-4 py-2 text-center text-sm text-slate-700">管理者による利用規約への同意が完了していません。管理者にご確認ください。</div>;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+      <div className="w-full max-w-lg space-y-4 rounded-2xl bg-white p-6 shadow-2xl">
+        <h2 className="text-xl font-bold">利用規約への同意のお願い</h2>
+        <p className="text-sm text-slate-600">
+          Intent-Trace をご利用いただくには、貴社を代表して管理者の方に
+          <a href="/lp/terms" target="_blank" rel="noreferrer" className="mx-1 text-indigo-700 underline">利用規約</a>
+          と
+          <a href="/lp/privacy" target="_blank" rel="noreferrer" className="mx-1 text-indigo-700 underline">プライバシーポリシー</a>
+          へご同意いただく必要があります（版: {TERMS_VERSION}）。
+        </p>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+          <span>{me.orgName} を代表して、利用規約およびプライバシーポリシーに同意します</span>
+        </label>
+        {err && <Alert>{err}</Alert>}
+        <Button
+          className="w-full"
+          disabled={!agree || busy}
+          onClick={async () => {
+            setBusy(true);
+            setErr(null);
+            try {
+              await post("/account/terms/accept", { version: TERMS_VERSION });
+              await refresh();
+            } catch (e) {
+              setErr(e instanceof ApiError ? e.message : "通信できませんでした");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          同意して利用を開始する
+        </Button>
+      </div>
     </div>
   );
 }

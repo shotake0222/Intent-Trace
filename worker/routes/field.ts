@@ -1,7 +1,7 @@
 // 現場（作業員PWA）向け API
 import { z } from "zod";
 import { HTTPException } from "hono/http-exception";
-import { createRouter, body, fail, newId, now, audit, raiseAlert, broadcast, assertSiteInOrg } from "../lib/app";
+import { createRouter, body, fail, newId, now, audit, raiseAlert, broadcast, assertSiteInOrg, assertOwned, assertOwnedAll } from "../lib/app";
 import { requireAuth } from "../lib/auth";
 import { loadTag, evaluateAssurance } from "../lib/tags";
 import { processTap } from "../lib/tap";
@@ -113,7 +113,7 @@ r.post("/equipment/:id/lock", async (c) => {
     });
     fail(403, q.reason, "not_qualified");
   }
-  const needsProc = await c.env.DB.prepare("SELECT 1 AS x FROM procedures WHERE equipment_id = ? AND unlocks_equipment = 1 LIMIT 1").bind(e.id).first();
+  const needsProc = await c.env.DB.prepare("SELECT 1 AS x FROM procedures WHERE equipment_id = ? AND org_id = ? AND unlocks_equipment = 1 LIMIT 1").bind(e.id, u.orgId).first();
   const r1 = await lockStub(c.env, e.id).acquire({ userId: u.id, userName: u.name }, !!needsProc);
   if (!r1.ok) fail(423, r1.reason ?? "他の作業者が操作中です", "locked");
   await audit(c.env, u.orgId, u.id, "equipment.lock", "equipment", e.id, { tapEventId: tap.id });
@@ -174,6 +174,7 @@ r.post("/inspections", async (c) => {
   }
   if (!tapId && u.role === "worker") fail(403, "点検記録には設備タグへのタッチが必要です", "presence_required");
 
+  await assertOwnedAll(c.env, "document", b.photoKeys, u.orgId);
   const id = await idFrom(dupId);
   await c.env.DB.prepare(
     `INSERT INTO inspections (id, org_id, site_id, equipment_id, user_id, tap_event_id, result, checklist_json, note, photo_keys_json, started_at, completed_at)
@@ -362,7 +363,12 @@ r.post("/incidents", async (c) => {
   );
   await assertSiteInOrg(c.env, b.siteId, u.orgId);
   let zoneId: string | null = null;
-  if (b.tagId) zoneId = (await loadTag(c.env, b.tagId))?.zone_id ?? null;
+  if (b.tagId) {
+    const tag = await loadTag(c.env, b.tagId);
+    if (tag && tag.org_id === u.orgId) zoneId = tag.zone_id ?? null;
+  }
+  await assertOwned(c.env, "equipment", b.equipmentId, u.orgId);
+  await assertOwnedAll(c.env, "document", b.photoKeys, u.orgId);
   const id = newId();
   const t = now();
   const res = await c.env.DB.prepare(

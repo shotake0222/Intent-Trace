@@ -95,6 +95,12 @@ export default function OpsTenantDetail() {
           </h1>
           <div className="text-sm text-slate-500">
             会社コード <span className="font-mono">{d.org.code}</span> ・ {d.contract.plan.name}プラン ・ 登録 {fmtDate(Number(d.org.created_at))}
+            {" ・ "}
+            {d.org.terms_accepted_at ? (
+              <span>利用規約 同意済（{String(d.org.terms_version)}・{fmtDate(Number(d.org.terms_accepted_at))}）</span>
+            ) : (
+              <span className="font-semibold text-amber-700">利用規約 未同意</span>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

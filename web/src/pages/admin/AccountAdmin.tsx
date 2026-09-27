@@ -631,7 +631,7 @@ function NotifyTab() {
               </li>
               {!link.personal && <li>通知を届けたいLINEグループに、その公式アカウントを招待します</li>}
               <li>
-                {link.personal ? "公式アカウントとのトーク" : "そのグループ"}で次の6桁を送信します（15分以内）
+                {link.personal ? "公式アカウントとのトーク" : "そのグループ"}で次のコードを送信します（15分以内）
                 <div className="mt-2 rounded-xl bg-slate-900 py-3 text-center font-mono text-3xl tracking-[.4em] text-white">{link.code}</div>
               </li>
             </ol>

@@ -20,7 +20,13 @@ export interface Me {
   trialEndsAt: number | null;
   /** 運営による代理ログイン中なら運営アカウントID */
   impersonatedBy: string | null;
+  /** 現行の利用規約に組織として同意済みか（管理者が同意） */
+  termsAccepted: boolean;
+  termsVersion: string;
 }
+
+/** 利用規約の版。改定したら更新すると、管理者に再同意を求める */
+export const TERMS_VERSION = "2026-10-01";
 
 export interface TagResolution {
   tag: {

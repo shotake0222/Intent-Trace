@@ -10,14 +10,14 @@ async function assertContract(env: Env, orgId: string) {
   const reason = contractBlockReason(c);
   if (reason) fail(403, reason, "contract_blocked");
 }
-import type { Me } from "../../shared/types";
+import { TERMS_VERSION, type Me } from "../../shared/types";
 
 const r = createRouter();
 
 // 簡易レート制限（KV）: 同一キーで 10 回/15分 失敗したらロック
-async function checkRate(env: Env, key: string) {
+async function checkRate(env: Env, key: string, limit = 10) {
   const n = Number((await env.CACHE.get(`rl:${key}`)) ?? 0);
-  if (n >= 10) fail(429, "試行回数が多すぎます。しばらく待ってから再度お試しください");
+  if (n >= limit) fail(429, "試行回数が多すぎます。しばらく待ってから再度お試しください");
 }
 async function bumpRate(env: Env, key: string) {
   const n = Number((await env.CACHE.get(`rl:${key}`)) ?? 0);
@@ -43,8 +43,11 @@ r.post("/login", async (c) => {
 // 作業員ログイン: 会社コード + 社員番号 + PIN
 r.post("/worker-login", async (c) => {
   const b = await body(c, z.object({ orgCode: z.string().min(1), employeeCode: z.string().min(1), pin: z.string().min(4).max(12) }));
-  const rk = `wlogin:${b.orgCode}:${b.employeeCode}`;
+  // 大文字小文字の違いで試行回数を水増しできないよう正規化。IP単位でも上限を設ける
+  const rk = `wlogin:${b.orgCode.trim().toUpperCase()}:${b.employeeCode.trim()}`;
+  const ipKey = `wlogin-ip:${c.req.header("cf-connecting-ip") ?? "unknown"}`;
   await checkRate(c.env, rk);
+  await checkRate(c.env, ipKey, 50);
   const u = await c.env.DB.prepare(
     `SELECT u.id, u.org_id, u.role, u.name, u.password_hash, u.active, u.token_version FROM users u JOIN organizations o ON o.id = u.org_id
       WHERE o.code = ? AND u.employee_code = ?`
@@ -53,6 +56,7 @@ r.post("/worker-login", async (c) => {
     .first<{ id: string; org_id: string; role: "admin" | "manager" | "worker"; name: string; password_hash: string; active: number; token_version: number }>();
   if (!u || !u.active || !(await verifyPassword(b.pin, u.password_hash))) {
     await bumpRate(c.env, rk);
+    await bumpRate(c.env, ipKey);
     fail(401, "会社コード・社員番号・PINのいずれかが違います");
   }
   await assertContract(c.env, u.org_id);
@@ -106,11 +110,11 @@ r.post("/logout", (c) => {
 r.get("/me", requireAuth, async (c) => {
   const u = c.get("user");
   const row = await c.env.DB.prepare(
-    `SELECT u.id, u.name, u.role, u.employee_code, o.id AS org_id, o.name AS org_name, o.plan
+    `SELECT u.id, u.name, u.role, u.employee_code, o.id AS org_id, o.name AS org_name, o.plan, o.terms_version
        FROM users u JOIN organizations o ON o.id = u.org_id WHERE u.id = ?`
   )
     .bind(u.id)
-    .first<{ id: string; name: string; role: Me["role"]; employee_code: string; org_id: string; org_name: string; plan: string }>();
+    .first<{ id: string; name: string; role: Me["role"]; employee_code: string; org_id: string; org_name: string; plan: string; terms_version: string | null }>();
   if (!row) fail(401, "ユーザーが見つかりません");
   const { results: quals } = await c.env.DB.prepare(
     `SELECT q.code, q.name, uq.expires_at FROM user_qualifications uq JOIN qualifications q ON q.id = uq.qualification_id WHERE uq.user_id = ?`
@@ -131,7 +135,9 @@ r.get("/me", requireAuth, async (c) => {
     planName: contract.plan.name,
     orgStatus: contract.status,
     trialEndsAt: contract.trialEndsAt,
-    impersonatedBy: u.impersonatedBy ?? null
+    impersonatedBy: u.impersonatedBy ?? null,
+    termsAccepted: row.terms_version === TERMS_VERSION,
+    termsVersion: TERMS_VERSION
   };
   return c.json(me);
 });

@@ -44,20 +44,20 @@ export async function getEquipment(env: Env, id: string, orgId: string) {
 export async function buildEquipmentCard(env: Env, equipmentId: string, orgId: string): Promise<EquipmentCard> {
   const e = await getEquipment(env, equipmentId, orgId);
   const [docs, insp, procs, lock] = await Promise.all([
-    env.DB.prepare("SELECT id, filename, kind, content_type FROM documents WHERE equipment_id = ? AND kind = 'manual' ORDER BY created_at DESC")
-      .bind(equipmentId)
+    env.DB.prepare("SELECT id, filename, kind, content_type FROM documents WHERE equipment_id = ? AND org_id = ? AND kind = 'manual' ORDER BY created_at DESC")
+      .bind(equipmentId, orgId)
       .all<{ id: string; filename: string; kind: string; content_type: string }>(),
     env.DB.prepare(
       `SELECT i.id, i.completed_at, i.result, i.note, u.name AS user_name FROM inspections i JOIN users u ON u.id = i.user_id
-        WHERE i.equipment_id = ? ORDER BY i.completed_at DESC LIMIT 10`
+        WHERE i.equipment_id = ? AND i.org_id = ? ORDER BY i.completed_at DESC LIMIT 10`
     )
-      .bind(equipmentId)
+      .bind(equipmentId, orgId)
       .all<{ id: string; completed_at: number; result: string; note: string | null; user_name: string }>(),
     env.DB.prepare(
       `SELECT p.id, p.name, p.unlocks_equipment, (SELECT COUNT(*) FROM procedure_steps s WHERE s.procedure_id = p.id) AS steps
-         FROM procedures p WHERE p.equipment_id = ?`
+         FROM procedures p WHERE p.equipment_id = ? AND p.org_id = ?`
     )
-      .bind(equipmentId)
+      .bind(equipmentId, orgId)
       .all<{ id: string; name: string; unlocks_equipment: number; steps: number }>(),
     e.lockable ? lockStub(env, equipmentId).status() : Promise.resolve<LockState>({ lockedBy: null, since: null, armed: false })
   ]);

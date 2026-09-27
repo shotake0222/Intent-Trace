@@ -78,7 +78,7 @@ r.post("/badge-tap", async (c) => {
         await audit(c.env, d.orgId, user.id, "equipment.unlock_denied", "equipment", eqId, { reason: q.reason, deviceId: d.id });
         await raiseAlert(c.env, { orgId: d.orgId, siteId: d.siteId, type: "unauthorized", severity: "warning", userId: user.id, refId: eqId, message: `${user.name} さんが無資格で「${e.name}」の起動を試みました（${q.reason}）` });
       } else {
-        const needsProc = await c.env.DB.prepare("SELECT 1 AS x FROM procedures WHERE equipment_id = ? AND unlocks_equipment = 1 LIMIT 1").bind(eqId).first();
+        const needsProc = await c.env.DB.prepare("SELECT 1 AS x FROM procedures WHERE equipment_id = ? AND org_id = ? AND unlocks_equipment = 1 LIMIT 1").bind(eqId, d.orgId).first();
         const acq = await lockStub(c.env, eqId).acquire({ userId: user.id, userName: user.name }, !!needsProc);
         allow = acq.ok;
         reason = acq.ok ? undefined : "locked_by_other";
@@ -120,7 +120,7 @@ r.post("/proximity", async (c) => {
   );
   const t = now();
   let inserted = 0;
-  const equipmentName = d.equipmentId ? (await c.env.DB.prepare("SELECT name FROM equipment WHERE id = ?").bind(d.equipmentId).first<{ name: string }>())?.name : null;
+  const equipmentName = d.equipmentId ? (await c.env.DB.prepare("SELECT name FROM equipment WHERE id = ? AND org_id = ?").bind(d.equipmentId, d.orgId).first<{ name: string }>())?.name : null;
   for (const ev of b.events) {
     const user = ev.bleId
       ? await c.env.DB.prepare("SELECT id, name FROM users WHERE org_id = ? AND ble_id = ?").bind(d.orgId, ev.bleId).first<{ id: string; name: string }>()

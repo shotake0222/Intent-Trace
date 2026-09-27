@@ -1,5 +1,5 @@
 // LINE Messaging API webhook  /api/line/webhook
-// 公式アカウントを友だち追加（またはグループに招待）し、管理画面で発行した6桁コードを送ると通知先として連携される
+// 公式アカウントを友だち追加（またはグループに招待）し、管理画面で発行した連携コード（IT-XXXXXXXX）を送ると通知先として連携される
 import { createRouter, newId, now, audit } from "../lib/app";
 import { getNotifyConfig, verifyLineSignature, lineReply, type NotifyConfig } from "../lib/notify";
 
@@ -21,7 +21,7 @@ async function lineGet<T>(cfg: NotifyConfig, path: string): Promise<T | null> {
   }
 }
 
-const GUIDE = "Intent-Trace の通知用アカウントです。\n管理画面「契約・サポート」→「通知」で発行した6桁の連携コードを、このトークに送信してください。";
+const GUIDE = "Intent-Trace の通知用アカウントです。\n管理画面「契約・サポート」→「通知」で発行した連携コード（IT-から始まる英数字）を、このトークに送信してください。";
 
 r.post("/webhook", async (c) => {
   const cfg = await getNotifyConfig(c.env);
@@ -51,15 +51,23 @@ r.post("/webhook", async (c) => {
       continue;
     }
     if (ev.type !== "message" || ev.message?.type !== "text") continue;
-    const m = /(?:^|\D)(\d{6})(?:\D|$)/.exec(ev.message.text ?? "");
+    const m = /IT-?([A-HJ-NP-Z2-9]{8})/i.exec(ev.message.text ?? "");
     if (!m) {
       if (src.type === "user") await reply(GUIDE);
       continue;
     }
+    // 総当たり対策: 同じトーク/グループからの失敗は1時間に10回まで
+    const rlKey = `rl:linelink:${lineId}`;
+    const fails = Number((await c.env.CACHE.get(rlKey)) ?? 0);
+    if (fails >= 10) {
+      await reply("連携コードの入力に続けて失敗したため、しばらく受け付けを停止しています。1時間ほどおいて再度お試しください。");
+      continue;
+    }
     const code = await c.env.DB.prepare("SELECT code, org_id, user_id, created_by, expires_at FROM line_link_codes WHERE code = ?")
-      .bind(m[1])
+      .bind(`IT-${m[1].toUpperCase()}`)
       .first<{ code: string; org_id: string; user_id: string | null; created_by: string | null; expires_at: number }>();
     if (!code || code.expires_at < now()) {
+      await c.env.CACHE.put(rlKey, String(fails + 1), { expirationTtl: 3600 });
       await reply("連携コードが見つからないか、有効期限（15分）が切れています。管理画面で新しいコードを発行してください。");
       continue;
     }

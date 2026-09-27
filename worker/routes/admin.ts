@@ -1,6 +1,6 @@
 // 管理者ダッシュボード向け API（マスタ管理・履歴参照）
 import { z } from "zod";
-import { createRouter, body, fail, newId, now, audit, assertSiteInOrg, parseJson } from "../lib/app";
+import { createRouter, body, fail, newId, now, audit, assertSiteInOrg, assertOwned, parseJson } from "../lib/app";
 import { requireAuth, requireRole } from "../lib/auth";
 import { hashPassword, randomToken, sha256Hex, sealSecret, openSecret, shortId } from "../lib/crypto";
 import { invalidateTag, invalidateTagsForEquipment } from "../lib/tags";
@@ -127,7 +127,8 @@ r.patch("/users/:id", adminOnly, async (c) => {
   const sets: string[] = [];
   const vals: unknown[] = [];
   if (b.name !== undefined) (sets.push("name = ?"), vals.push(b.name));
-  if (b.role !== undefined) (sets.push("role = ?"), vals.push(b.role));
+  // 権限変更・無効化は既存のログインを即時失効させる
+  if (b.role !== undefined) (sets.push("role = ?", "token_version = token_version + 1"), vals.push(b.role));
   if (b.email !== undefined) (sets.push("email = ?"), vals.push(b.email?.toLowerCase() ?? null));
   if (b.employeeCode !== undefined) (sets.push("employee_code = ?"), vals.push(b.employeeCode));
   if (b.secret) (sets.push("password_hash = ?", "token_version = token_version + 1"), vals.push(await hashPassword(b.secret)));
@@ -137,6 +138,7 @@ r.patch("/users/:id", adminOnly, async (c) => {
     if (b.active) await assertLimit(c.env, u.orgId, "users");
     sets.push("active = ?");
     vals.push(b.active ? 1 : 0);
+    if (!b.active) sets.push("token_version = token_version + 1");
   }
   if (!sets.length) return c.json({ ok: true });
   const res = await c.env.DB.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ? AND org_id = ?`).bind(...vals, id, u.orgId).run();
@@ -213,6 +215,8 @@ r.post("/equipment", async (c) => {
   const u = c.get("user");
   const b = await body(c, equipmentSchema);
   await assertSiteInOrg(c.env, b.siteId, u.orgId);
+  await assertOwned(c.env, "zone", b.zoneId, u.orgId);
+  await assertOwned(c.env, "qualification", b.requiredQualificationId, u.orgId);
   const id = newId();
   await c.env.DB.prepare(
     `INSERT INTO equipment (id, org_id, site_id, zone_id, name, category, model, serial_no, location_note, required_qualification_id, lockable, inspection_interval_days, checklist_json, created_at)
@@ -226,6 +230,8 @@ r.post("/equipment", async (c) => {
 r.patch("/equipment/:id", async (c) => {
   const u = c.get("user");
   const b = await body(c, equipmentSchema.partial());
+  await assertOwned(c.env, "zone", b.zoneId, u.orgId);
+  await assertOwned(c.env, "qualification", b.requiredQualificationId, u.orgId);
   const map: Record<string, [string, (v: unknown) => unknown]> = {
     zoneId: ["zone_id", (v) => v],
     name: ["name", (v) => v],
@@ -293,6 +299,8 @@ r.post("/tags", async (c) => {
   const u = c.get("user");
   const b = await body(c, tagSchema);
   await assertSiteInOrg(c.env, b.siteId, u.orgId);
+  await assertOwned(c.env, "zone", b.zoneId, u.orgId);
+  await assertOwned(c.env, "equipment", b.equipmentId, u.orgId);
   await assertLimit(c.env, u.orgId, "tags");
   if (b.security === "sun") await assertFeature(c.env, u.orgId, "sun", "暗号タグ鍵の手動登録");
   if (b.kind === "equipment" && !b.equipmentId) fail(422, "設備タグには設備の指定が必要です");
@@ -329,6 +337,8 @@ function tagUrl(reqUrl: string, id: string, security: string) {
 r.patch("/tags/:id", async (c) => {
   const u = c.get("user");
   const b = await body(c, tagSchema.partial().extend({ active: z.boolean().optional() }));
+  await assertOwned(c.env, "zone", b.zoneId, u.orgId);
+  await assertOwned(c.env, "equipment", b.equipmentId, u.orgId);
   const sets: string[] = [];
   const vals: unknown[] = [];
   if (b.label !== undefined) (sets.push("label = ?"), vals.push(b.label));
@@ -444,6 +454,8 @@ r.post("/tags/register", async (c) => {
   if (b.kind === "equipment" && !b.equipmentId) fail(422, "設備タグには設備の指定が必要です");
   const s = await loadStock(c.env, b.stockId, u.orgId);
   if (s.item_type !== "location_tag") fail(422, "社員証は「作業員・資格」画面でユーザーに割り当ててください");
+  await assertOwned(c.env, "zone", b.zoneId, u.orgId);
+  await assertOwned(c.env, "equipment", b.equipmentId, u.orgId);
   await assertLimit(c.env, u.orgId, "tags");
   let uid = s.uid;
   let lastCtr = -1;
@@ -608,6 +620,7 @@ r.post("/procedures", async (c) => {
     })
   );
   if (b.unlocksEquipment && !b.equipmentId) fail(422, "起動許可に連動する手順には設備の指定が必要です");
+  await assertOwned(c.env, "equipment", b.equipmentId, u.orgId);
   const tagIds = [...new Set(b.steps.map((s) => s.tagId))];
   const { results: valid } = await c.env.DB.prepare(`SELECT id FROM tags WHERE org_id = ? AND id IN (${tagIds.map(() => "?").join(",")})`).bind(u.orgId, ...tagIds).all();
   if (valid.length !== tagIds.length) fail(422, "不明なタグが含まれています");
@@ -636,6 +649,8 @@ r.post("/devices", adminOnly, async (c) => {
   await assertFeature(c.env, u.orgId, "devices", "IoTデバイス連携");
   const b = await body(c, z.object({ siteId: z.string(), kind: z.enum(["ble_receiver", "nfc_reader"]), name: z.string().min(1), equipmentId: optStr, tagId: optStr }));
   await assertSiteInOrg(c.env, b.siteId, u.orgId);
+  await assertOwned(c.env, "equipment", b.equipmentId, u.orgId);
+  await assertOwned(c.env, "tag", b.tagId, u.orgId);
   const id = `dev_${shortId(12)}`;
   const token = randomToken(32);
   await c.env.DB.prepare("INSERT INTO devices (id, org_id, site_id, kind, name, equipment_id, tag_id, token_hash, created_at) VALUES (?,?,?,?,?,?,?,?,?)")

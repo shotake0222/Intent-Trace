@@ -100,7 +100,7 @@ flowchart LR
 | トライアル終了3日前・支払期限経過 | 請求書送付先 | メール（Cron） |
 
 - メール送信サービスは Brevo / Resend / SendGrid から選択（APIキーは暗号化保存）。未設定でも送信履歴に内容は記録されます。
-- LINE は Messaging API。LINE Developers に Webhook URL（`/api/line/webhook`）を登録し、テナント管理者が発行した6桁コードをグループ／個人トークで送ると連携されます。
+- LINE は Messaging API。LINE Developers に Webhook URL（`/api/line/webhook`）を登録し、テナント管理者が発行した連携コード（IT-XXXXXXXX）をグループ／個人トークで送ると連携されます。
 - すべての通知は `notification_outbox` に記録され、失敗分は Cron（10分ごと）で最大5回再送。同一内容のアラートは3分以内の重複送信を抑止。
 
 **運営の二段階認証（TOTP）**: Google Authenticator 等に対応。ログインは「パスワード → 6桁コード（またはリカバリーコード10個・各1回）」。同じコードの再利用は拒否。オーナーは「全運営アカウントに必須化」「他アカウントの2FAリセット」が可能。
@@ -113,6 +113,7 @@ flowchart LR
 - スタイルは Tailwind をビルドした `web/public/lp/lp.css`（HTMLを編集したら `npm run build:lp`）
 - お問い合わせフォームは Formspree（`https://formspree.io/f/xppwyngv`）へ送信
 - 掲載価格は運営コンソール「料金プラン」と一致させること
+- 利用規約 `web/public/lp/terms.html`。改定時は `shared/types.ts` の `TERMS_VERSION` を更新すると、各テナント管理者に再同意を求める
 
 ## ローカル開発
 
@@ -135,6 +136,7 @@ npm test                                  # 単体（AES-CMAC / SUN / TOTP）
 node scripts/e2e.mjs http://localhost:5173         # 現場・管理の結合テスト（seed 後）
 node scripts/e2e-ops.mjs http://localhost:5173     # 運営・タグ登録
 node scripts/e2e-notify.mjs http://localhost:5173  # 通知・二段階認証・QR
+node scripts/e2e-tenancy.mjs http://localhost:5173 # テナント分離・規約同意・権限失効（e2e-ops の後）
 ```
 
 ## デプロイ（Cloudflare）
