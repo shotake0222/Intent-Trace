@@ -136,7 +136,7 @@ function ContractTab({ onConsult }: { onConsult: () => void }) {
 
       <Card title="プラン一覧">
         <div className="grid gap-4 md:grid-cols-3">
-          {d.plans.map((p) => {
+          {d.plans.filter((p) => p.code !== "trial" || p.code === d.contract.plan.code).map((p) => {
             const current = p.code === d.contract.plan.code;
             return (
               <div key={p.code} className={cx("rounded-2xl p-4 ring-1", current ? "bg-slate-900 text-white ring-slate-900" : "ring-slate-200")}>
@@ -145,8 +145,14 @@ function ContractTab({ onConsult }: { onConsult: () => void }) {
                   {current && <Badge tone="amber">ご契約中</Badge>}
                 </div>
                 <div className="mt-1 text-xl font-bold">
-                  {yen(p.monthly_fee)}
-                  <span className="text-xs font-normal opacity-70">/月（税抜）</span>
+                  {p.code === "enterprise" && !current ? (
+                    "個別見積もり"
+                  ) : (
+                    <>
+                      {yen(p.monthly_fee)}
+                      <span className="text-xs font-normal opacity-70">/月（税抜）</span>
+                    </>
+                  )}
                 </div>
                 <ul className="mt-2 space-y-0.5 text-xs opacity-80">
                   <li>

@@ -295,7 +295,9 @@ const EVENT_LABEL: Record<string, string> = {
   invoice: "請求書",
   reminder_trial: "トライアル終了",
   reminder_overdue: "支払督促",
-  test: "テスト"
+  test: "テスト",
+  ops_error: "運営: エラー報告",
+  ops_escalation: "運営: 通知未達"
 };
 export const statusBadge = (s: string) => <Badge tone={s === "sent" ? "green" : s === "failed" ? "red" : s === "skipped" ? "slate" : "blue"}>{{ sent: "送信済", failed: "失敗", skipped: "未送信（未設定）", pending: "送信待ち" }[s] ?? s}</Badge>;
 
@@ -387,5 +389,109 @@ function OutboxDetail({ id, onClose, onChanged }: { id: string; onClose: () => v
         </div>
       )}
     </Modal>
+  );
+}
+
+interface ErrGroup { source: string; path: string | null; message: string; n: number; last_at: number; orgs: number }
+interface ErrRow { id: string; source: string; method: string | null; path: string | null; message: string; detail: string | null; user_agent: string | null; created_at: number; reported_at: number | null; org_name: string | null }
+interface Undelivered { id: string; org_name: string | null; channel: string; to_label: string | null; to_address: string; subject: string; attempts: number; last_error: string | null; created_at: number; escalated_at: number | null }
+
+export function OpsErrors() {
+  const [days, setDays] = useState("7");
+  const { data } = useApi<{ groups: ErrGroup[]; recent: ErrRow[]; undelivered: Undelivered[] }>(`/ops/errors?days=${days}`, [days]);
+  const [open, setOpen] = useState<string | null>(null);
+  const detail = data?.recent.find((r) => r.id === open);
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold whitespace-nowrap">システムエラー</h1>
+        <div className="w-32">
+          <Select value={days} onChange={(e) => setDays(e.target.value)}>
+            <option value="1">24時間</option>
+            <option value="7">7日</option>
+            <option value="30">30日</option>
+          </Select>
+        </div>
+      </div>
+      <Alert tone="blue">
+        サーバー・画面で起きた想定外のエラーと、届かなかった通知を表示します。新しいエラーは10分ごとに確認し、運営のオーナーとサポート窓口へメールでまとめて通知します（1時間に1通まで）。緊急アラートの通知が失敗した場合は即時に通知します。
+      </Alert>
+      <Card title={`届いていない通知（${data?.undelivered.length ?? 0}件）`}>
+        {!data?.undelivered.length ? (
+          <Empty>ありません</Empty>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-slate-500">
+                <tr className="whitespace-nowrap"><th className="py-2 pr-3">日時</th><th className="pr-3">テナント</th><th className="pr-3">宛先</th><th className="pr-3">件名</th><th className="pr-3">理由</th><th>状態</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.undelivered.map((u) => (
+                  <tr key={u.id}>
+                    <td className="py-2 pr-3 whitespace-nowrap">{fmtDateTime(u.created_at)}</td>
+                    <td className="pr-3 whitespace-nowrap">{u.org_name ?? "運営"}</td>
+                    <td className="pr-3 text-xs whitespace-nowrap">{u.channel === "line" ? "LINE" : "メール"} {u.to_label ?? u.to_address}</td>
+                    <td className={`max-w-xs truncate ${u.subject.startsWith("【緊急】") ? "font-bold text-red-700" : ""}`}>{u.subject}</td>
+                    <td className="max-w-xs truncate text-xs text-slate-500">{u.last_error}</td>
+                    <td className="text-xs whitespace-nowrap">{u.attempts >= 5 ? "再送終了" : `再送中（${u.attempts}回）`}{u.escalated_at ? " ・ 運営通知済" : ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+      <Card title="エラーの種類別">
+        {!data?.groups.length ? (
+          <Empty>エラーはありません</Empty>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-slate-500">
+                <tr><th className="py-2">最終発生</th><th>場所</th><th>内容</th><th className="text-right">件数</th><th className="text-right">影響テナント</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.groups.map((g, i) => (
+                  <tr key={i}>
+                    <td className="py-2 whitespace-nowrap">{fmtDateTime(g.last_at)}</td>
+                    <td className="text-xs"><Badge tone={g.source === "server" ? "red" : "amber"}>{g.source === "server" ? "サーバー" : "画面"}</Badge> <span className="font-mono">{g.path ?? "-"}</span></td>
+                    <td className="max-w-md truncate">{g.message}</td>
+                    <td className="text-right tabular-nums">{g.n}</td>
+                    <td className="text-right tabular-nums">{g.orgs}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+      <Card title="直近のエラー">
+        {!data?.recent.length ? (
+          <Empty>エラーはありません</Empty>
+        ) : (
+          <ul className="divide-y divide-slate-100 text-sm">
+            {data.recent.map((r) => (
+              <li key={r.id} className="cursor-pointer py-2 hover:bg-slate-50" onClick={() => setOpen(r.id)}>
+                <span className="mr-2 text-xs text-slate-500">{fmtDateTime(r.created_at)}</span>
+                <span className="mr-2 font-mono text-xs">{r.method ?? ""} {r.path}</span>
+                {r.org_name && <span className="mr-2 text-xs text-slate-500">{r.org_name}</span>}
+                <span>{r.message}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      {detail && (
+        <Modal open title="エラー詳細" onClose={() => setOpen(null)} wide>
+          <div className="space-y-2 text-sm">
+            <div>{fmtDateTime(detail.created_at)} ・ {detail.source === "server" ? "サーバー" : "画面"} ・ {detail.org_name ?? "テナント不明"}</div>
+            <div className="font-mono text-xs">{detail.method} {detail.path}</div>
+            <div className="font-semibold">{detail.message}</div>
+            <pre className="max-h-80 overflow-auto rounded bg-slate-900 p-3 text-[11px] text-slate-100">{detail.detail ?? "(スタックなし)"}</pre>
+            <div className="text-xs text-slate-500">{detail.user_agent}</div>
+          </div>
+        </Modal>
+      )}
+    </div>
   );
 }

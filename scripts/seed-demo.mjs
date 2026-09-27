@@ -19,7 +19,7 @@ await api.post("/api/auth/setup", {
   orgName: "多摩ビルサービス（デモ）",
   orgCode: "DEMO",
   siteName: "立川サンプルビル",
-  plan: "pro",
+  plan: "enterprise",
   adminName: "管理 太郎",
   ...ADMIN
 });

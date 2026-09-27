@@ -12,7 +12,10 @@ export interface QueueItem {
   createdAt: number;
   attempts: number;
   error?: string;
+  errorCode?: string | null;
   failed?: boolean;
+  /** 拒否された記録を管理者向けにサーバーへ預けた時刻 */
+  reportedAt?: number;
 }
 
 const DB_NAME = "intent-trace";
@@ -81,7 +84,10 @@ export async function syncQueue(): Promise<{ sent: number; remaining: number }> 
   let sent = 0;
   try {
     for (const item of await listQueue()) {
-      if (item.failed) continue;
+      if (item.failed) {
+        if (!item.reportedAt) await reportRejected(item);
+        continue;
+      }
       try {
         const payload = { ...item.payload };
         if (item.photos?.length) {
@@ -99,7 +105,9 @@ export async function syncQueue(): Promise<{ sent: number; remaining: number }> 
         sent++;
       } catch (e) {
         if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 401 && e.status !== 429) {
-          await update({ ...item, attempts: item.attempts + 1, failed: true, error: e.message });
+          const failedItem = { ...item, attempts: item.attempts + 1, failed: true, error: e.message, errorCode: e.code };
+          await update(failedItem);
+          await reportRejected(failedItem);
           notify();
           continue;
         }
@@ -112,6 +120,37 @@ export async function syncQueue(): Promise<{ sent: number; remaining: number }> 
     notify();
   }
   return { sent, remaining: (await listQueue()).length };
+}
+
+/** 拒否された記録を管理者が確認できるようサーバーへ預ける（写真は件数のみ）。失敗しても次回の同期で再試行 */
+async function reportRejected(item: QueueItem) {
+  try {
+    const { photoKeys: _pk, ...payload } = item.payload as Record<string, unknown> & { photoKeys?: unknown };
+    await api("/rejected", {
+      method: "POST",
+      json: {
+        clientId: item.id,
+        kind: item.kind,
+        payload,
+        photoCount: (item.photos?.length ?? 0) + (Array.isArray(_pk) ? _pk.length : 0),
+        error: item.error ?? "不明なエラー",
+        errorCode: item.errorCode ?? null,
+        occurredAt: typeof item.payload.occurredAt === "number" ? item.payload.occurredAt : item.createdAt
+      }
+    });
+    await update({ ...item, reportedAt: Date.now() });
+  } catch {
+    /* 通信できなければ次回 */
+  }
+}
+
+/** 送信できなかった記録をもう一度送る（資格の更新・設定変更の後など） */
+export async function retryItem(id: string) {
+  const item = (await listQueue()).find((q) => q.id === id);
+  if (!item) return;
+  await update({ ...item, failed: false, error: undefined, errorCode: undefined });
+  notify();
+  await syncQueue();
 }
 
 export function startAutoSync() {

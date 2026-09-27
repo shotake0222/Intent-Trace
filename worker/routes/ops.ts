@@ -903,6 +903,34 @@ r.patch("/tickets/:id", async (c) => {
 });
 
 // ---------- 通知（送信履歴・テスト送信） ----------
+// ===== システムエラー =====
+r.get("/errors", async (c) => {
+  const days = Math.min(90, Number(c.req.query("days") ?? 7));
+  const since = now() - days * 86400_000;
+  const [groups, recent] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT e.source, e.path, e.message, COUNT(*) n, MAX(e.created_at) last_at, COUNT(DISTINCT e.org_id) orgs
+         FROM error_events e WHERE e.created_at > ? GROUP BY e.source, e.path, e.message ORDER BY last_at DESC LIMIT 100`
+    )
+      .bind(since)
+      .all(),
+    c.env.DB.prepare(
+      `SELECT e.id, e.source, e.method, e.path, e.message, e.detail, e.user_agent, e.created_at, e.reported_at, o.name AS org_name
+         FROM error_events e LEFT JOIN organizations o ON o.id = e.org_id WHERE e.created_at > ? ORDER BY e.created_at DESC LIMIT 200`
+    )
+      .bind(since)
+      .all()
+  ]);
+  const undelivered = await c.env.DB.prepare(
+    `SELECT n.id, o.name AS org_name, n.channel, n.to_label, n.to_address, n.subject, n.attempts, n.last_error, n.created_at, n.escalated_at
+       FROM notification_outbox n LEFT JOIN organizations o ON o.id = n.org_id
+      WHERE n.status = 'failed' AND n.created_at > ? ORDER BY n.created_at DESC LIMIT 100`
+  )
+    .bind(since)
+    .all();
+  return c.json({ groups: groups.results, recent: recent.results, undelivered: undelivered.results });
+});
+
 r.get("/notifications", async (c) => {
   const status = c.req.query("status") ?? null;
   const { results } = await c.env.DB.prepare(

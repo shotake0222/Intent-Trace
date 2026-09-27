@@ -35,6 +35,8 @@ export default function UsersAdmin() {
   const [newQual, setNewQual] = useState({ code: "", name: "" });
   const [err, setErr] = useState<string | null>(null);
   const isAdmin = me?.role === "admin";
+  // 固定リーダー・BLE受信機（IoT連携）はオプション機能。契約していなければ関連項目を隠す
+  const iot = !!me?.features.includes("devices");
 
   return (
     <div className="space-y-6">
@@ -54,7 +56,7 @@ export default function UsersAdmin() {
                   <th>氏名</th>
                   <th>権限</th>
                   <th>資格</th>
-                  <th>社員証 / BLE</th>
+                  {iot && <th>社員証 / BLE</th>}
                   <th />
                 </tr>
               </thead>
@@ -97,15 +99,19 @@ export default function UsersAdmin() {
                         </button>
                       </div>
                     </td>
-                    <td className="font-mono text-xs text-slate-500">
-                      {u.badge_uid ?? "—"}
-                      <br />
-                      {u.ble_id ?? "—"}
-                    </td>
+                    {iot && (
+                      <td className="font-mono text-xs text-slate-500">
+                        {u.badge_uid ?? "—"}
+                        <br />
+                        {u.ble_id ?? "—"}
+                      </td>
+                    )}
                     <td className="text-right whitespace-nowrap">
-                      <Button variant="ghost" size="sm" onClick={() => setBadgeFor(u)}>
-                        社員証
-                      </Button>
+                      {iot && (
+                        <Button variant="ghost" size="sm" onClick={() => setBadgeFor(u)}>
+                          社員証
+                        </Button>
+                      )}
                       {isAdmin && (
                         <>
                           <Button variant="ghost" size="sm" onClick={() => setEditing(u)}>
@@ -181,6 +187,8 @@ export default function UsersAdmin() {
 }
 
 function UserForm({ row, onClose, onSaved }: { row: UserRow | null; onClose: () => void; onSaved: () => void }) {
+  const { me } = useAuth();
+  const iot = !!me?.features.includes("devices");
   const [f, setF] = useState({
     role: row?.role ?? "worker",
     name: row?.name ?? "",
@@ -230,12 +238,16 @@ function UserForm({ row, onClose, onSaved }: { row: UserRow | null; onClose: () 
           <Input type="password" value={f.secret} onChange={set("secret")} inputMode={worker ? "numeric" : undefined} />
         </Field>
         <div />
-        <Field label="スマート社員証 UID（プランB）" hint="固定リーダーでのタッチ認証に使用">
-          <Input value={f.badgeUid} onChange={set("badgeUid")} className="font-mono" />
-        </Field>
-        <Field label="携帯BLEタグ ID" hint="iBeacon の major:minor 等。重機の接近検知で本人を特定">
-          <Input value={f.bleId} onChange={set("bleId")} className="font-mono" placeholder="100:23" />
-        </Field>
+        {iot && (
+          <>
+            <Field label="スマート社員証 UID（プランB）" hint="固定リーダーでのタッチ認証に使用">
+              <Input value={f.badgeUid} onChange={set("badgeUid")} className="font-mono" />
+            </Field>
+            <Field label="携帯BLEタグ ID" hint="iBeacon の major:minor 等。重機の接近検知で本人を特定">
+              <Input value={f.bleId} onChange={set("bleId")} className="font-mono" placeholder="100:23" />
+            </Field>
+          </>
+        )}
       </div>
       {err && (
         <div className="mt-3">

@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { useApi, useQueue } from "../../lib/hooks";
-import { removeItem, syncQueue } from "../../lib/offline";
+import { removeItem, retryItem, syncQueue } from "../../lib/offline";
 import { webNfcSupported } from "../../lib/nfc";
 import { Alert, Badge, Button, Card } from "../../components/ui";
 import { fmtTime } from "../../lib/format";
@@ -69,13 +69,28 @@ export default function Home() {
                     {f.kind === "tap" ? "タッチ" : f.kind === "inspection" ? "点検" : "ヒヤリハット"} {fmtTime(f.createdAt)}
                   </div>
                   <div className="text-red-700">{f.error}</div>
+                  {f.reportedAt ? <div className="text-xs text-slate-500">管理者に通知済み</div> : null}
                 </div>
-                <Button size="sm" variant="outline" onClick={() => void removeItem(f.id)}>
-                  破棄
-                </Button>
+                <div className="flex shrink-0 flex-col gap-1">
+                  <Button size="sm" variant="outline" onClick={() => void retryItem(f.id)}>
+                    再送
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (confirm(f.reportedAt ? "この端末から削除します（管理者には控えが届いています）" : "管理者にまだ届いていません。削除してよいですか？")) void removeItem(f.id);
+                    }}
+                  >
+                    削除
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
+          <p className="mt-3 text-xs text-slate-500">
+            内容は自動で管理者にも届いています{failed.some((f) => !f.reportedAt) ? "（一部は電波が戻り次第）" : ""}。資格の更新などで解決した場合は「再送」、不要なら「削除」してください。
+          </p>
         </Card>
       )}
 

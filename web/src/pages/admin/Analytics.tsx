@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useAdmin } from "./AdminLayout";
+import { useAuth } from "../../lib/auth";
 import { useApi } from "../../lib/hooks";
 import { Alert, Card, Empty, cx } from "../../components/ui";
 import { DowHourHeatmap, ZoneMap } from "../../components/charts";
@@ -23,6 +24,8 @@ interface Duration {
 
 export default function Analytics() {
   const { siteId } = useAdmin();
+  const { me } = useAuth();
+  const iot = !!me?.features.includes("devices");
   const [days, setDays] = useState(30);
   const [metric, setMetric] = useState<"incidents" | "taps">("incidents");
   const from = useMemo(() => Date.now() - days * 86400_000, [days]);
@@ -84,7 +87,7 @@ export default function Analytics() {
                   <th className="py-1">作業員</th>
                   <th className="text-right">件数</th>
                   <th className="text-right">うち危険</th>
-                  <th className="text-right">BLE接近</th>
+                  {iot && <th className="text-right">BLE接近</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -93,7 +96,7 @@ export default function Analytics() {
                     <td className="py-2 font-medium">{u.name}</td>
                     <td className="text-right tabular-nums">{u.incidents}</td>
                     <td className={cx("text-right tabular-nums", u.danger > 0 && "font-bold text-red-600")}>{u.danger}</td>
-                    <td className="text-right tabular-nums">{u.ble}</td>
+                    {iot && <td className="text-right tabular-nums">{u.ble}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -101,7 +104,7 @@ export default function Analytics() {
           )}
         </Card>
 
-        <Card title="重機別の接近検知（BLE）">
+        {iot && (<Card title="重機別の接近検知（BLE）">
           {!heat.data?.equipment.length ? (
             <Empty>接近検知はありません</Empty>
           ) : (
@@ -126,7 +129,7 @@ export default function Analytics() {
               </tbody>
             </table>
           )}
-        </Card>
+        </Card>)}
 
         <Card title="点検に時間がかかっている設備（平均所要時間）">
           {!dur.data?.length ? (

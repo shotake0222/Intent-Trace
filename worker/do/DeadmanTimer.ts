@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { raiseAlert, broadcast, newId } from "../lib/app";
+import { recordError } from "../lib/monitor";
 
 /**
  * 単独作業者の生存確認タイマー（セッション1件につき1インスタンス）。
@@ -70,6 +71,19 @@ export class DeadmanTimer extends DurableObject<Env> {
   }
 
   async alarm() {
+    try {
+      await this.fire();
+    } catch (e) {
+      // 記録やアラート保存に失敗しても見守りを止めない: 記録して30秒後に再試行
+      console.error("deadman alarm failed", e);
+      await recordError(this.env, { source: "server", path: "DeadmanTimer.alarm", message: e instanceof Error ? e.message : String(e), detail: e instanceof Error ? (e.stack ?? null) : null });
+      const s = await this.load();
+      if (s && s.phase === "alarm") await this.ctx.storage.setAlarm(Date.now() + 30_000);
+      else if (s && s.phase === "grace" && !(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(s.deadlineAt + s.graceSec * 1000);
+    }
+  }
+
+  private async fire() {
     const s = await this.load();
     if (!s || s.phase === "ended") return;
     const t = Date.now();

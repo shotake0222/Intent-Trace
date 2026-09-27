@@ -9,6 +9,7 @@ import { assertLimit, assertFeature } from "../lib/platform";
 import { verifySun, SunError } from "../lib/sun";
 import { sendUserInviteMail } from "../lib/mailers";
 import { qrSvg, tagQrUrl } from "../lib/qr";
+import { undeliveredAlerts } from "../lib/monitor";
 
 const r = createRouter();
 r.use("*", requireAuth, requireRole("admin", "manager"));
@@ -674,6 +675,37 @@ r.delete("/devices/:id", adminOnly, async (c) => {
   const u = c.get("user");
   await c.env.DB.prepare("DELETE FROM devices WHERE id = ? AND org_id = ?").bind(c.req.param("id"), u.orgId).run();
   await audit(c.env, u.orgId, u.id, "device.delete", "device", c.req.param("id"));
+  return c.json({ ok: true });
+});
+
+// ===== 届かなかった通知・送信を拒否された現場記録 =====
+r.get("/undelivered-alerts", async (c) => {
+  const u = c.get("user");
+  return c.json(await undeliveredAlerts(c.env, u.orgId));
+});
+
+r.get("/rejected", async (c) => {
+  const u = c.get("user");
+  const all = c.req.query("all") === "1";
+  const { results } = await c.env.DB.prepare(
+    `SELECT r.id, r.kind, r.payload_json, r.photo_count, r.error, r.error_code, r.occurred_at, r.created_at, r.resolved_at, r.resolution,
+            u.name AS user_name, s.name AS site_name, rb.name AS resolved_by_name
+       FROM rejected_submissions r JOIN users u ON u.id = r.user_id LEFT JOIN sites s ON s.id = r.site_id LEFT JOIN users rb ON rb.id = r.resolved_by
+      WHERE r.org_id = ? AND (? = 1 OR r.resolved_at IS NULL) ORDER BY r.created_at DESC LIMIT 200`
+  )
+    .bind(u.orgId, all ? 1 : 0)
+    .all<Record<string, unknown> & { payload_json: string }>();
+  return c.json(results.map(({ payload_json, ...x }) => ({ ...x, payload: parseJson(payload_json, {}) })));
+});
+
+r.post("/rejected/:id/resolve", async (c) => {
+  const u = c.get("user");
+  const b = await body(c, z.object({ resolution: z.string().max(500).default("") }));
+  const res = await c.env.DB.prepare("UPDATE rejected_submissions SET resolved_at = ?, resolved_by = ?, resolution = ? WHERE id = ? AND org_id = ? AND resolved_at IS NULL")
+    .bind(now(), u.id, b.resolution || null, c.req.param("id"), u.orgId)
+    .run();
+  if (!res.meta.changes) fail(404, "見つからないか、既に確認済みです");
+  await audit(c.env, u.orgId, u.id, "rejected.resolve", "rejected_submission", c.req.param("id"), { resolution: b.resolution });
   return c.json({ ok: true });
 });
 

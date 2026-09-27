@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { LiveEvent, LockState } from "../../../../shared/types";
 import { useAdmin } from "./AdminLayout";
+import { useAuth } from "../../lib/auth";
 import { useApi, useInterval, useNow } from "../../lib/hooks";
 import { post } from "../../lib/api";
 import { Badge, Button, Card, Empty, Stat, assuranceTone, severityTone, cx } from "../../components/ui";
@@ -43,6 +44,7 @@ interface DeadmanRow {
 
 export default function Dashboard() {
   const { siteId } = useAdmin();
+  const { me } = useAuth();
   const [range] = useState(() => ({ from: Date.now() - 14 * 86400_000 }));
   const summary = useApi<Summary>(`/analytics/summary?siteId=${siteId}&from=${range.from}`, [siteId]);
   const alerts = useApi<AlertRow[]>("/admin/alerts?open=1");
@@ -113,6 +115,9 @@ export default function Dashboard() {
         </span>
       </div>
 
+      <UndeliveredBanner />
+      <RejectedCard />
+
       {dangerAlerts.length > 0 && (
         <div className="space-y-2">
           {dangerAlerts.map((a) => (
@@ -134,7 +139,7 @@ export default function Dashboard() {
         <Stat label="稼働作業員" value={s?.taps.activeUsers ?? "—"} />
         <Stat label="点検" value={s?.inspections.total ?? "—"} sub={s ? `異常 ${s.inspections.ng}` : undefined} tone={s?.inspections.ng ? "amber" : undefined} />
         <Stat label="巡回完了" value={s ? `${s.patrols.completed}/${s.patrols.total}` : "—"} />
-        <Stat label="ヒヤリハット" value={s?.incidents.total ?? "—"} sub={s ? `BLE接近 ${s.incidents.ble}` : undefined} tone={s?.incidents.danger ? "red" : undefined} />
+        <Stat label="ヒヤリハット" value={s?.incidents.total ?? "—"} sub={s && me?.features.includes("devices") ? `BLE接近 ${s.incidents.ble}` : undefined} tone={s?.incidents.danger ? "red" : undefined} />
         <Stat label="未対応アラート" value={siteAlerts.length} tone={dangerAlerts.length ? "red" : siteAlerts.length ? "amber" : undefined} />
       </div>
 
@@ -284,4 +289,77 @@ function FeedItem({ ev }: { ev: LiveEvent }) {
     case "deadman":
       return <span>生存確認: {d.phase === "ended" ? "終了" : d.phase === "waiting" ? "応答あり" : d.phase === "grace" ? "遅延" : "応答なし"}</span>;
   }
+}
+
+/** メール・LINEで届かなかったアラート（直近7日） */
+function UndeliveredBanner() {
+  const { data } = useApi<{ id: string; channel: string; to_label: string | null; to_address: string; subject: string; last_error: string | null; created_at: number }[]>("/admin/undelivered-alerts");
+  const [open, setOpen] = useState(false);
+  if (!data?.length) return null;
+  return (
+    <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-bold">📵 メール・LINEで届かなかったアラートが {data.length} 件あります（直近7日）</div>
+        <button className="shrink-0 underline" onClick={() => setOpen(!open)}>
+          {open ? "閉じる" : "詳細"}
+        </button>
+      </div>
+      <p className="mt-1 text-xs">自動で再送しています。運営にも通知済みです。宛先（契約・サポート →「通知」）を確認してください。</p>
+      {open && (
+        <ul className="mt-3 space-y-1 text-xs">
+          {data.map((d) => (
+            <li key={d.id}>
+              {fmtDate(d.created_at)} {fmtTime(d.created_at)} ・ {d.channel === "line" ? "LINE" : "メール"} → {d.to_label ?? d.to_address} ・ {d.subject}
+              <span className="text-amber-700">（{d.last_error ?? "不明"}）</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = { tap: "タッチ", inspection: "点検", incident: "ヒヤリハット" };
+
+/** 現場の端末から送信を拒否された記録（作業員の端末から自動で届く） */
+function RejectedCard() {
+  const { data, reload } = useApi<
+    { id: string; kind: string; payload: Record<string, unknown>; photo_count: number; error: string; occurred_at: number; user_name: string; site_name: string | null }[]
+  >("/admin/rejected");
+  if (!data?.length) return null;
+  return (
+    <Card title={`送信できなかった現場の記録（${data.length}件）`}>
+      <p className="mb-3 text-xs text-slate-500">オフライン中に保存され、後から送信したときにサーバーが受け付けなかった記録です。内容を確認し、必要なら作業員に再実施を依頼してください。</p>
+      <div className="space-y-2">
+        {data.map((r) => (
+          <div key={r.id} className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3 text-sm">
+            <div className="min-w-0">
+              <div className="font-semibold">
+                {KIND_LABEL[r.kind] ?? r.kind} ・ {r.user_name} ・ {fmtDate(r.occurred_at)} {fmtTime(r.occurred_at)}
+                {r.site_name ? ` ・ ${r.site_name}` : ""}
+              </div>
+              <div className="text-red-700">{r.error}</div>
+              <div className="truncate text-xs text-slate-500">
+                {typeof r.payload.title === "string" ? `件名: ${r.payload.title} ` : ""}
+                {typeof r.payload.result === "string" ? `判定: ${r.payload.result} ` : ""}
+                {typeof r.payload.note === "string" ? `メモ: ${r.payload.note} ` : ""}
+                {r.photo_count ? `写真 ${r.photo_count}枚（端末内）` : ""}
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const note = prompt("対応内容（任意）", "作業員に確認済み") ?? "";
+                await post(`/admin/rejected/${r.id}/resolve`, { resolution: note });
+                await reload();
+              }}
+            >
+              確認済み
+            </Button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
 }

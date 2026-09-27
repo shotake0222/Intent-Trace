@@ -6,6 +6,7 @@ import "./index.css";
 import App from "./App";
 import { AuthProvider } from "./lib/auth";
 import { startAutoSync } from "./lib/offline";
+import { ErrorBoundary, installGlobalErrorReporting } from "./components/ErrorBoundary";
 
 registerSW({
   immediate: true,
@@ -25,14 +26,17 @@ if ("serviceWorker" in navigator) {
     if (pending && document.visibilityState === "hidden") location.reload();
   });
 }
+installGlobalErrorReporting();
 startAutoSync();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>
 );

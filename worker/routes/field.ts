@@ -386,6 +386,38 @@ r.post("/incidents", async (c) => {
 });
 
 // ---------- 作業員の今日の記録 ----------
+/**
+ * 端末のオフライン保存から送信して拒否された記録を、管理者が確認できるよう預ける。
+ * 端末側は拒否を受けた時点で自動送信する（写真は件数のみ）。同じ記録は1回だけ保存。
+ */
+r.post("/rejected", async (c) => {
+  const u = c.get("user");
+  const b = await body(
+    c,
+    z.object({
+      clientId: z.string().min(8).max(64),
+      kind: z.enum(["tap", "inspection", "incident"]),
+      payload: z.record(z.string(), z.unknown()),
+      photoCount: z.number().int().min(0).max(20).default(0),
+      error: z.string().max(500),
+      errorCode: z.string().max(64).nullish(),
+      occurredAt: z.number().int()
+    })
+  );
+  const json = JSON.stringify(b.payload);
+  if (json.length > 16_000) fail(422, "記録が大きすぎます");
+  // 現場IDは自社のものだけ紐付ける（削除済み・他社の場合は紐付けずに保存し、端末の再送ループを防ぐ）
+  let siteId = typeof b.payload.siteId === "string" ? b.payload.siteId : null;
+  if (siteId && !(await c.env.DB.prepare("SELECT 1 FROM sites WHERE id = ? AND org_id = ?").bind(siteId, u.orgId).first())) siteId = null;
+  const res = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO rejected_submissions (id, org_id, site_id, user_id, kind, client_id, payload_json, photo_count, error, error_code, occurred_at, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  )
+    .bind(newId(), u.orgId, siteId, u.id, b.kind, b.clientId, json, b.photoCount, b.error, b.errorCode ?? null, Math.min(b.occurredAt, now()), now())
+    .run();
+  return c.json({ ok: true, duplicate: res.meta.changes === 0 });
+});
+
 r.get("/my/history", async (c) => {
   const u = c.get("user");
   const { results } = await c.env.DB.prepare(

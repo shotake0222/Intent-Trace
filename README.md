@@ -115,6 +115,21 @@ flowchart LR
 - 掲載価格は運営コンソール「料金プラン」と一致させること
 - 利用規約 `web/public/lp/terms.html`。改定時は `shared/types.ts` の `TERMS_VERSION` を更新すると、各テナント管理者に再同意を求める
 
+## エラー時の挙動
+
+| 場面 | 挙動 |
+|---|---|
+| 圏外・通信断 | 端末（IndexedDB）に保存し、復帰後に自動再送 |
+| 送信が拒否（4xx） | 端末の「送信できなかった記録」に表示（再送・削除）。同時に `/api/rejected` へ控えを送り、管理者ダッシュボードに表示 |
+| 画面の予期しないエラー | ErrorBoundary が案内画面を表示し `/api/client-errors` へ報告。デプロイ直後の読み込み失敗は1回だけ自動再読み込み |
+| サーバーの想定外エラー | 利用者には汎用メッセージ。`error_events` に記録し、cron が運営（オーナー＋サポート窓口）へ1時間に1通までまとめてメール。運営コンソール「システムエラー」 |
+| 通知の失敗 | 10分ごとに最大5回再送。上限到達・緊急アラートの失敗は運営へエスカレーション、テナントのダッシュボードにも表示 |
+| 生存確認タイマーの失敗 | Durable Object の alarm 内で記録し30秒後に再試行 |
+
+## IoT連携（オプション）
+
+BLE受信機・固定NFCリーダー・スマート社員証はプラン機能 `devices` を持つ契約（`enterprise`）のみ表示。標準はスマホ＋NFCタグだけで運用する。運営コンソール「料金プラン」で機能を付け替えれば再表示される。
+
 ## ローカル開発
 
 ```bash
@@ -137,6 +152,7 @@ node scripts/e2e.mjs http://localhost:5173         # 現場・管理の結合テ
 node scripts/e2e-ops.mjs http://localhost:5173     # 運営・タグ登録
 node scripts/e2e-notify.mjs http://localhost:5173  # 通知・二段階認証・QR
 node scripts/e2e-tenancy.mjs http://localhost:5173 # テナント分離・規約同意・権限失効（e2e-ops の後）
+node scripts/e2e-errors.mjs http://localhost:5173  # エラー記録・運営通知・拒否された記録
 ```
 
 ## デプロイ（Cloudflare）

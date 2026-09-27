@@ -25,6 +25,7 @@ const NAV = [
   { to: "/ops/announcements", label: "お知らせ配信" },
   { to: "/ops/support", label: "サポート" },
   { to: "/ops/notifications", label: "通知履歴" },
+  { to: "/ops/errors", label: "システムエラー" },
   { to: "/ops/settings", label: "設定・通知・セキュリティ" },
   { to: "/ops/audit", label: "運営監査ログ" }
 ];

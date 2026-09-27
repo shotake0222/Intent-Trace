@@ -15,6 +15,7 @@ import ops from "./routes/ops";
 import account from "./routes/account";
 import line from "./routes/line";
 import { runScheduled } from "./cron";
+import { recordError, runMonitor } from "./lib/monitor";
 
 export { EquipmentLock } from "./do/EquipmentLock";
 export { DeadmanTimer } from "./do/DeadmanTimer";
@@ -64,15 +65,68 @@ app.get("/", (c) => {
 
 app.notFound((c) => (c.req.path.startsWith("/api/") ? c.json({ error: "Not Found" }, 404) : c.env.ASSETS.fetch(c.req.raw)));
 
+// 画面側で起きた予期しないエラーの報告（ErrorBoundary / window.onerror から）
+app.post("/api/client-errors", async (c) => {
+  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+  const rk = `rl:clienterr:${ip}`;
+  const n = Number((await c.env.CACHE.get(rk)) ?? 0);
+  if (n >= 30) return c.json({ ok: true, dropped: true });
+  await c.env.CACHE.put(rk, String(n + 1), { expirationTtl: 3600 });
+  let b: { message?: unknown; stack?: unknown; path?: unknown; componentStack?: unknown } = {};
+  try {
+    b = await c.req.json();
+  } catch {
+    /* noop */
+  }
+  const u = await readSession(c).catch(() => null);
+  await recordError(c.env, {
+    source: "client",
+    path: typeof b.path === "string" ? b.path : null,
+    message: typeof b.message === "string" ? b.message : "unknown",
+    detail: [b.stack, b.componentStack].filter((x) => typeof x === "string").join("\n---\n") || null,
+    orgId: u?.orgId ?? null,
+    userId: u?.id ?? null,
+    userAgent: c.req.header("user-agent") ?? null
+  });
+  return c.json({ ok: true });
+});
+
 app.onError((err, c) => {
   if (err instanceof HTTPException) return err.getResponse();
   console.error(err);
-  return c.json({ error: "サーバーエラーが発生しました" }, 500);
+  // 想定外のエラーは記録し、cron で運営へまとめて通知する
+  const u = (c.get as (k: string) => { id?: string; orgId?: string } | undefined)("user");
+  const task = recordError(c.env, {
+    source: "server",
+    method: c.req.method,
+    path: c.req.routePath && c.req.routePath !== "*" ? c.req.routePath : new URL(c.req.url).pathname,
+    message: err instanceof Error ? err.message : String(err),
+    detail: err instanceof Error ? (err.stack ?? null) : null,
+    orgId: u?.orgId ?? null,
+    userId: u?.id ?? null,
+    userAgent: c.req.header("user-agent") ?? null
+  });
+  try {
+    c.executionCtx.waitUntil(task);
+  } catch {
+    /* テスト環境など executionCtx が無い場合 */
+  }
+  return c.json({ error: "サーバーエラーが発生しました。時間をおいて再度お試しください（運営に自動で通知されています）", code: "server_error" }, 500);
 });
 
 export default {
   fetch: app.fetch,
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runScheduled(env).then((r) => console.log("scheduled", JSON.stringify(r))));
+    const fail = (path: string) => (e: unknown) =>
+      recordError(env, { source: "server", path, message: e instanceof Error ? e.message : String(e), detail: e instanceof Error ? (e.stack ?? null) : null });
+    // 再送・リマインダーと、エラー監視は互いに影響しないよう別々に実行
+    ctx.waitUntil(
+      runScheduled(env)
+        .then((r) => console.log("scheduled", JSON.stringify(r)))
+        .catch(fail("cron"))
+        .then(() => runMonitor(env))
+        .then((r) => console.log("monitor", JSON.stringify(r)))
+        .catch(fail("cron.monitor"))
+    );
   }
 } satisfies ExportedHandler<Env>;

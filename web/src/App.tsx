@@ -23,7 +23,7 @@ import Records from "./pages/admin/Records";
 import SitesAdmin from "./pages/admin/SitesAdmin";
 import AccountAdmin from "./pages/admin/AccountAdmin";
 import OpsLayout, { OpsLogin, ResetPassword } from "./pages/ops/OpsLayout";
-import { OpsNotifications } from "./pages/ops/OpsSecurity";
+import { OpsErrors, OpsNotifications } from "./pages/ops/OpsSecurity";
 import OpsDashboard from "./pages/ops/OpsDashboard";
 import OpsTenants from "./pages/ops/OpsTenants";
 import OpsTenantDetail from "./pages/ops/OpsTenantDetail";
@@ -99,6 +99,7 @@ export default function App() {
         <Route path="settings" element={<OpsSettings />} />
         <Route path="audit" element={<OpsAudit />} />
         <Route path="notifications" element={<OpsNotifications />} />
+        <Route path="errors" element={<OpsErrors />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

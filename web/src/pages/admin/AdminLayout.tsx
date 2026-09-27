@@ -75,7 +75,7 @@ export default function AdminLayout() {
           <div className="font-bold text-white">Intent-Trace</div>
         </div>
         <nav className="space-y-0.5 px-3 pb-4">
-          {NAV.map((n) => (
+          {NAV.filter((n) => n.to !== "/admin/devices" || me?.features.includes("devices")).map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
